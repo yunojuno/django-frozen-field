@@ -1,5 +1,4 @@
 from django.db import models
-from django.db.models.fields import BLANK_CHOICE_DASH
 from django.db.models.fields.related import ForeignKey
 
 from frozen_data.fields import FrozenDataField
@@ -18,4 +17,6 @@ class FlatModel(models.Model):
 
 class NestedModel(models.Model):
     frozen = FrozenDataField(FlatModel, null=True, blank=True)
-    current = ForeignKey(FlatModel, on_delete=models.CASCADE, null=True, blank=True)
+    current = models.ForeignKey(
+        FlatModel, on_delete=models.CASCADE, null=True, blank=True
+    )

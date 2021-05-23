@@ -63,19 +63,20 @@ class FrozenDataField(models.JSONField):
         instance.save = self.raise_stale
         return instance
 
-    def _serialize(self, value: Model) -> dict:
+    def _serialize(self, value: Model) -> dict | None:
         """Serialize a model to a dict."""
         if value is None:
             return value
         obj_data = {"frozen_at": tz_now()}
         for field in value._meta.local_fields:
-            if (
-                isinstance(field, (ForeignKey, OneToOneField))
-                and field.name in self.deep_freeze
-            ):
-                obj_data[field.name] = self._serialize(getattr(value, field.name))
+            _val = getattr(value, field.name)
+            if isinstance(field, (ForeignKey, OneToOneField)):
+                if field.name in self.deep_freeze:
+                    obj_data[field.name] = self._serialize(_val)
+                else:
+                    obj_data[f"{field.name}_id"] = _val.id if _val else None
             else:
-                obj_data[field.name] = field.get_prep_value(getattr(value, field.name))
+                obj_data[field.name] = field.get_prep_value(_val)
         return obj_data
 
     def deconstruct(self) -> tuple[str, str, list, dict]:
@@ -107,11 +108,8 @@ class FrozenDataField(models.JSONField):
         _value = super().from_db_value(value, expression, connection)
         return self._deserialize(**_value)
 
-    def get_prep_value(self, value: object) -> dict:
+    def get_prep_value(self, value: object) -> dict | None:
         # JSONField expects a dict, so serialize the object first
-        # print(f"get_prep_value1: {value}")
         _value = self._serialize(value)
-        # print(f"get_prep_value2: {_value}")
         _value = super().get_prep_value(_value)
-        # print(f"get_prep_value3: {_value}")
         return _value
