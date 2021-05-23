@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from datetime import datetime
-from typing import cast
+from typing import Optional, cast
 
 from django.core import serializers
 from django.core.serializers.json import DjangoJSONEncoder
@@ -50,9 +50,9 @@ class FrozenDataMixin:
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)  # type: ignore
-        self.frozen_at: datetime | None = None
-        self._id: int | None = None
-        self._raw: dict | None = None
+        self.frozen_at: Optional[datetime] = None
+        self._id: Optional[int] = None
+        self._raw: Optional[dict] = None
 
     @classmethod
     def _fields(cls, action: str) -> list[str]:

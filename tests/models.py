@@ -14,9 +14,7 @@ class FlatModel(FrozenDataMixin, models.Model):
     field_datetime = models.DateTimeField()
     field_uuid = models.UUIDField()
 
+
 class NestedModel(FrozenDataMixin, models.Model):
     frozen = FrozenDataField(FlatModel)
     current = ForeignKey(FlatModel, on_delete=models.CASCADE)
-
-
-

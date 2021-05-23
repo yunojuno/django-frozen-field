@@ -21,12 +21,11 @@ def flat():
         field_uuid=uuid.uuid4(),
     )
 
+
 @pytest.fixture
 def nested(flat):
-    return NestedModel.objects.create(
-        frozen=flat,
-        current=flat
-    )
+    return NestedModel.objects.create(frozen=flat, current=flat)
+
 
 @pytest.mark.django_db
 class TestFrozenDataMixin:

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .mixins import FrozenDataMixin
 
+
 class StaleObjectError(Exception):
     """
     Custom error raised when a defrosted object is saved.

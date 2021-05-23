@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from django.db import models
 from django.db.models.base import Model
@@ -39,20 +39,20 @@ class FrozenDataField(models.JSONField):
         super().__init__(*args, **kwargs)
         self.app_model = app_model
 
-    def deconstruct(self) -> tuple[str, str, object, object]:
+    def deconstruct(self) -> tuple[str, str, list, dict]:
         name, path, args, kwargs = super().deconstruct()
         args.insert(0, self.app_model)
         return name, path, args, kwargs
 
     def from_db_value(
         self, value: object, expression: object, connection: object
-    ) -> FrozenDataMixin | None:
+    ) -> Optional[FrozenDataMixin]:
         _value = super().from_db_value(value, expression, connection)
         if not value:
             return None
         return self.app_model.unfreeze(**_value)
 
-    def to_python(self, value: object) -> FrozenDataMixin | None:
+    def to_python(self, value: object) -> Optional[FrozenDataMixin]:
         _value = super().to_python(value)
 
         if _value is None:
