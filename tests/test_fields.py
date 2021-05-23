@@ -2,7 +2,6 @@ import uuid
 from decimal import Decimal
 
 import pytest
-from attr.setters import frozen
 from django.utils.timezone import now as tz_now
 
 from frozen_data.exceptions import StaleObjectError
