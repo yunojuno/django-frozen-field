@@ -1,3 +1,10 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .mixins import FrozenDataMixin
+
 class StaleObjectError(Exception):
     """
     Custom error raised when a defrosted object is saved.
@@ -9,5 +16,7 @@ class StaleObjectError(Exception):
 
     """
 
-    def __init__(self) -> None:
-        super().__init__("Defrosted objects cannot be saved.")
+    def __init__(self, obj: FrozenDataMixin) -> None:
+        super().__init__(
+            f"Object was frozen at {obj.frozen_at}; defrosted objects cannot be saved."
+        )

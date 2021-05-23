@@ -51,6 +51,7 @@ class FrozenDataMixin:
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)  # type: ignore
         self.frozen_at: datetime | None = None
+        self._id: int | None = None
         self._raw: dict | None = None
 
     @classmethod
@@ -97,7 +98,6 @@ class FrozenDataMixin:
             data[f] = getattr(self, f)
         # id is not included in the default output
         data["_id"] = self.id  # type: ignore
-        data["_pk"] = self.pk
         data["frozen_at"] = tz_now().isoformat()
         return data
 
@@ -154,9 +154,6 @@ class FrozenDataMixin:
     @classmethod
     def unfreeze(cls, **kwargs: object) -> FrozenDataMixin:
         """Deserialize dict back into object representation."""
-        frozen_at = cast(datetime, kwargs.pop("frozen_at"))
-        _id = kwargs.pop("_id")
-        _pk = kwargs.pop("_pk")
         instance = cls()
         for k, v in kwargs.items():
             if k in (cls._fields("copy") + cls._fields("lazy")):
@@ -164,13 +161,12 @@ class FrozenDataMixin:
             if k in cls._fields("serialize"):
                 klass = cls._meta.get_field(k).app_model
                 setattr(instance, k, klass.unfreeze(**v))
-        instance.frozen_at = frozen_at
+        instance.frozen_at = cast(datetime, kwargs.pop("frozen_at"))
+        instance._id = cast(int, kwargs.pop("_id"))
         instance._raw = kwargs
-        instance._id = _id
-        instance._pk = _pk
         return instance
 
     def save(self, *args: object, **kwargs: object) -> object | None:
         if self.frozen_at:
-            raise StaleObjectError(f"Object was frozen at {self.frozen_at}")
+            raise StaleObjectError(self)
         return super().save(*args, **kwargs)  # type: ignore
