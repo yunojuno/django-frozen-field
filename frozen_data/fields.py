@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Optional
+from typing import NoReturn
 
+from django.core.exceptions import FieldDoesNotExist, ValidationError
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from django.db.models.base import Model
+from django.db.models.fields import Field
+from django.db.models.fields.related import ForeignKey, OneToOneField
+from django.utils.timezone import now as tz_now
 from django.utils.translation import gettext_lazy as _lazy
 
-if TYPE_CHECKING:
-    from .mixins import FrozenDataMixin
+from frozen_data.exceptions import StaleObjectError
 
 
 class FrozenDataField(models.JSONField):
@@ -21,52 +25,87 @@ class FrozenDataField(models.JSONField):
     that you get back is deserialized from this snapshot, and cannot be saved itself,
     as this would overwrite newer data.
 
-        >>> address = Address.objects.last()
-        >>> test = TestFrozenData(address=address)
-        >>> test.save()
-        >>> test.refresh_from_db()
-        >>> assert test.address == address
-        >>> test.address.save()
-        StaleObjectError: Defrosted objects cannot be saved.
-        >>> test.address.serialized_at
-        '2021-05-23T11:51:39.961342+00:00'
-
     """
 
     description = _lazy("A frozen representation of a FK model")
 
-    def __init__(self, app_model: Model, *args: object, **kwargs: object) -> None:
+    def __init__(
+        self,
+        app_model: Model,
+        *args: object,
+        deep_freeze: list[str] | None = None,
+        **kwargs: object,
+    ) -> None:
+        kwargs["encoder"] = DjangoJSONEncoder
         super().__init__(*args, **kwargs)
         self.app_model = app_model
+        self.deep_freeze: list[str] = []
+
+    def raise_stale(self) -> NoReturn:
+        raise StaleObjectError
+
+    def get_model_field(self, field_name: str) -> Field:
+        return self.app_model._meta.get_field(field_name)
+
+    def _deserialize(self, **frozen_model_data: object) -> object:
+        """Convert serialized data back to a clone of the original object."""
+        obj_data = {}
+        for k, v in frozen_model_data.items():
+            try:
+                field: Field = self.get_model_field(k)
+            except FieldDoesNotExist:
+                continue
+            else:
+                obj_data[k] = field.to_python(v)
+        instance = self.app_model(**obj_data)
+        instance.frozen_at = frozen_model_data["frozen_at"]
+        instance._raw = frozen_model_data
+        instance.save = self.raise_stale
+        return instance
+
+    def _serialize(self, value: Model) -> dict:
+        """Serialize a model to a dict."""
+        obj_data = {"frozen_at": tz_now()}
+        if not value:
+            return obj_data
+        for field in value._meta.local_fields:
+            if isinstance(field, (ForeignKey, OneToOneField)):
+                continue
+            obj_data[field.name] = field.get_prep_value(getattr(value, field.name))
+        return obj_data
 
     def deconstruct(self) -> tuple[str, str, list, dict]:
         name, path, args, kwargs = super().deconstruct()
         args.insert(0, self.app_model)
         return name, path, args, kwargs
 
-    def from_db_value(
-        self, value: object, expression: object, connection: object
-    ) -> Optional[FrozenDataMixin]:
-        _value = super().from_db_value(value, expression, connection)
-        if not value:
-            return None
-        return self.app_model.unfreeze(**_value)
-
-    def to_python(self, value: object) -> Optional[FrozenDataMixin]:
+    def to_python(self, value: object) -> object | None:
         _value = super().to_python(value)
 
         if _value is None:
             return None
 
         if isinstance(_value, str):
-            return self.app_model.unfreeze(**json.loads(_value))
+            _value = json.loads(_value)
 
         if isinstance(_value, dict):
-            return self.app_model.unfreeze(**_value)
+            return self._deserialize(**_value)
 
-        return _value
+        raise ValidationError(f"Unable to convert value to {self.app_model}")
 
-    def get_prep_value(self, value: FrozenDataMixin) -> dict:
+    def from_db_value(
+        self, value: object, expression: object, connection: object
+    ) -> object | None:
+        if not value:
+            return None
+        _value = super().from_db_value(value, expression, connection)
+        return self._deserialize(**_value)
+
+    def get_prep_value(self, value: object) -> dict:
         # JSONField expects a dict, so serialize the object first
-        _value = value.freeze()
-        return super().get_prep_value(_value)
+        # print(f"get_prep_value1: {value}")
+        _value = self._serialize(value)
+        # print(f"get_prep_value2: {_value}")
+        _value = super().get_prep_value(_value)
+        # print(f"get_prep_value3: {_value}")
+        return _value
