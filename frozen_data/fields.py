@@ -65,18 +65,24 @@ class FrozenDataField(models.JSONField):
 
     def _serialize(self, value: Model) -> dict:
         """Serialize a model to a dict."""
+        if value is None:
+            return value
         obj_data = {"frozen_at": tz_now()}
-        if not value:
-            return obj_data
         for field in value._meta.local_fields:
-            if isinstance(field, (ForeignKey, OneToOneField)):
-                continue
-            obj_data[field.name] = field.get_prep_value(getattr(value, field.name))
+            if (
+                isinstance(field, (ForeignKey, OneToOneField))
+                and field.name in self.deep_freeze
+            ):
+                obj_data[field.name] = self._serialize(getattr(value, field.name))
+            else:
+                obj_data[field.name] = field.get_prep_value(getattr(value, field.name))
         return obj_data
 
     def deconstruct(self) -> tuple[str, str, list, dict]:
         name, path, args, kwargs = super().deconstruct()
         args.insert(0, self.app_model)
+        if self.deep_freeze:
+            kwargs["deep_freeze"] = self.deep_freeze
         return name, path, args, kwargs
 
     def to_python(self, value: object) -> object | None:
