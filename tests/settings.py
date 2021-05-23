@@ -12,6 +12,8 @@ USE_L10N = True
 
 DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": "test.db"}}
 
+DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
+
 INSTALLED_APPS = (
     "django.contrib.admin",
     "django.contrib.auth",
@@ -19,7 +21,8 @@ INSTALLED_APPS = (
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "my_app",
+    "frozen_data",
+    "tests",
 )
 
 MIDDLEWARE = [
@@ -73,7 +76,7 @@ LOGGING = {
     },
 }
 
-ROOT_URLCONF = "tests.urls"
+# ROOT_URLCONF = "tests.urls"
 
 if not DEBUG:
     raise Exception("This settings file can only be used with DEBUG=True")
