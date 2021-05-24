@@ -1,5 +1,4 @@
 from django.db import models
-from django.db.models.fields.related import ForeignKey
 
 from frozen_data.fields import FrozenDataField
 

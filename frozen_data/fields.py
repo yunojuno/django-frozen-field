@@ -38,17 +38,31 @@ class FrozenDataField(models.JSONField):
     ) -> None:
         kwargs["encoder"] = DjangoJSONEncoder
         super().__init__(*args, **kwargs)
-        self.app_model = app_model
+        self.app_model: Model = app_model
         self.deep_freeze: list[str] = []
 
     def raise_stale(self) -> NoReturn:
+        """Patch model save method to raise StaleObjectError."""
         raise StaleObjectError
 
     def get_model_field(self, field_name: str) -> Field:
         return self.app_model._meta.get_field(field_name)
 
     def _deserialize(self, **frozen_model_data: object) -> object:
-        """Convert serialized data back to a clone of the original object."""
+        """
+        Convert serialized data back to a clone of the original object.
+
+        The JSON stored will have date, datetime, Decimal, UUID fields all saved
+        as strings. In order to deserialize these values back into the expected
+        type we use the original model field. e.g. if `date_created` is declared
+        on the model as a `models.DateField`, the JSON will contain
+        `{"date_created": "2021-05-05"}. In order to deserialize this correctly
+        we lean on the destination field itself, using the `to_python` method to
+        convert it back to a datetime.date.
+
+            obj.date_created = DateField.to_python("2021-05-05")
+
+        """
         obj_data = {}
         for k, v in frozen_model_data.items():
             try:
@@ -58,8 +72,11 @@ class FrozenDataField(models.JSONField):
             else:
                 obj_data[k] = field.to_python(v)
         instance = self.app_model(**obj_data)
+        # the properties below are added to the new instance - they do not
+        # appear on the model, and are indicative of an unfrozen object.
         instance.frozen_at = frozen_model_data["frozen_at"]
         instance._raw = frozen_model_data
+        # patch in a new save method that prevents overwriting current data
         instance.save = self.raise_stale
         return instance
 

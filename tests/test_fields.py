@@ -25,9 +25,10 @@ def flat():
 
 @pytest.fixture
 def nested(flat):
-    nested = NestedModel(frozen=flat, current=flat)
-    nested.save()
-    return nested
+    return NestedModel.objects.create(
+        frozen=flat,
+        current=flat,
+    )
 
 
 @pytest.mark.django_db
