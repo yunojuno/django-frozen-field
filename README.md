@@ -9,11 +9,34 @@ Django model custom field for storing a frozen snapshot of an object.
 * The frozen object cannot be resaved
 * Supports nesting of objects
 
+## Usage
+
+A frozen field can be declared like a `ForeignKey`:
+
+```python
+class Foo:
+    frozen_bar = FrozenObjectField(Bar, help_text="This is a frozen snapshot of the object.")
+    fresh_bar = ForeignKey(Bar, help_text="This is a live FK relationship.")
+```
+
+The field behaves exactly like a FK, with the exception that the object cannot be saved:
+
+```python
+>>> bar = Bar()
+>>> foo = Foo.objects.create(frozen_bar=bar, fresh_bar=bar)
+>>> # the fresh field can be updated as you would expect
+>>> foo.fresh_bar.save()
+>>> # the frozen field cannot - to prevent overwriting new data.
+>>> foo.frozen_bar.save()
+>>> StaleObjectError: 'Object was frozen; defrosted objects cannot be saved.'
+```
+
 ### Issues - TODO
 
-- [ ] Deserialization of DateField/DateTimeField values
-- [ ] Deserialization of DecimalField values
-- [ ] Deserialization of UUIDField values
+- [x] Deserialization of DateField/DateTimeField values
+- [x] Deserialization of DecimalField values
+- [x] Deserialization of UUIDField values
+- [ ] Deep object freezing
 
 #### Running tests
 
