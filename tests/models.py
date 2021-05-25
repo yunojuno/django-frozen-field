@@ -12,10 +12,32 @@ class FlatModel(models.Model):
     field_datetime = models.DateTimeField()
     field_float = models.FloatField()
     field_uuid = models.UUIDField()
+    field_json = models.JSONField(null=True)
 
 
 class NestedModel(models.Model):
-    frozen = FrozenDataField(FlatModel, null=True, blank=True)
-    current = models.ForeignKey(
-        FlatModel, on_delete=models.CASCADE, null=True, blank=True
+    frozen = FrozenDataField(
+        FlatModel,
+        null=True,
+        blank=True,
+    )
+    fresh = models.ForeignKey(
+        FlatModel,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+
+
+class DeepNestedModel(models.Model):
+    frozen = FrozenDataField(
+        NestedModel,
+        null=True,
+        blank=True,
+    )
+    fresh = models.ForeignKey(
+        NestedModel,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
     )
