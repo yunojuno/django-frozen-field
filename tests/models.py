@@ -1,6 +1,6 @@
 from django.db import models
 
-from frozen_data.fields import FrozenDataField
+from frozen_data.fields import FrozenObjectField
 
 
 class FlatModel(models.Model):
@@ -16,7 +16,7 @@ class FlatModel(models.Model):
 
 
 class NestedModel(models.Model):
-    frozen = FrozenDataField(
+    frozen = FrozenObjectField(
         FlatModel,
         null=True,
         blank=True,
@@ -30,7 +30,7 @@ class NestedModel(models.Model):
 
 
 class DeepNestedModel(models.Model):
-    frozen = FrozenDataField(
+    frozen = FrozenObjectField(
         NestedModel,
         null=True,
         blank=True,

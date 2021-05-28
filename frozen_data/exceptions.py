@@ -14,3 +14,10 @@ class StaleObjectError(Exception):
 
     def __init__(self) -> None:
         super().__init__("Object was frozen; defrosted objects cannot be saved.")
+
+
+class FrozenAttribute(Exception):
+    """Custom error raised when trying to edit a frozen value."""
+
+    def __init__(self) -> None:
+        super().__init__("Object was frozen; attributes cannot be changed.")

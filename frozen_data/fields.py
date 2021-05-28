@@ -19,7 +19,7 @@ def _raise_stale_object_error() -> NoReturn:
     raise StaleObjectError
 
 
-class FrozenDataField(models.JSONField):
+class FrozenObjectField(models.JSONField):
     """
     Store snapshot of a model instance in a JSONField.
 

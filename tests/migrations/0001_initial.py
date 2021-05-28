@@ -51,7 +51,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "frozen",
-                    frozen_data.fields.FrozenDataField(
+                    frozen_data.fields.FrozenObjectField(
                         tests.models.FlatModel,
                         blank=True,
                         encoder=django.core.serializers.json.DjangoJSONEncoder,
@@ -83,7 +83,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "frozen",
-                    frozen_data.fields.FrozenDataField(
+                    frozen_data.fields.FrozenObjectField(
                         tests.models.NestedModel,
                         blank=True,
                         encoder=django.core.serializers.json.DjangoJSONEncoder,
