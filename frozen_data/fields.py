@@ -28,8 +28,21 @@ class FrozenObjectField(models.JSONField):
     def __init__(
         self,
         *args: object,
+        deep_freeze: bool = False,
+        exclude: list[str] | None = None,
         **kwargs: object,
     ) -> None:
+        """
+        Initialise FrozenObjectField.
+
+        If deep_freeze is True then related objects are serialized. This can
+            cause recursion errors, and is False by default.
+        The `exclude` list is a list of field names in the object that you can
+            be ignored.
+
+        """
+        self.deep_freeze = deep_freeze
+        self.exclude = exclude or []
         kwargs["encoder"] = DjangoJSONEncoder
         super().__init__(*args, **kwargs)
 
@@ -67,10 +80,14 @@ class FrozenObjectField(models.JSONField):
         if value is None:
             return value
 
-        print(f"GET_PREP_VALUE for: {value}")
+        # print(f"GET_PREP_VALUE for: {value}")
         # from .models import FrozenObject
         if isinstance(value, models.Model):
-            value = FrozenObject.from_object(value)
+            value = FrozenObject.from_object(
+                value,
+                deep_freeze=self.deep_freeze,
+                exclude=self.exclude,
+            )
 
         # if it's not a model we assume it is a FrozenObject already
         # print(f"SERIALIZING: {value}")

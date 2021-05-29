@@ -7,9 +7,10 @@ from typing import NoReturn
 from django.db import models
 from django.db.models.fields import Field
 from django.db.models.fields.json import JSONField
+from django.db.models.fields.related import ForeignKey, RelatedField
 from django.utils.timezone import now as tz_now
 
-from frozen_data.exceptions import FrozenAttribute, StaleObjectError
+from frozen_data.exceptions import ExcludedAttribute, FrozenAttribute, StaleObjectError
 
 
 class FrozenObject:
@@ -24,9 +25,9 @@ class FrozenObject:
                 "label": "core.Address",
                 "frozen_at": "2021-05-28T16:42:43.829687+00:00",
                 "fields": {
-                    "id": "django.db.models.IntegerField",
-                    "line_1": "django.db.models.CharField",
-                    "user": "frozen_data.models.FrozenObject"
+                    "id": ("django.db.models", "IntegerField"),
+                    "line_1": ("django.db.models", ""CharField"),
+                    "user": ("frozen_data.models", "FrozenObject")
                 }
             },
             "id": 1,
@@ -59,6 +60,27 @@ class FrozenObject:
 
     def __init__(self, frozen_data: dict) -> None:
         self.raw = frozen_data
+        # print(f"FIELDS: {self.fields}")
+        # for name, model in self.fields.items():
+        #     print(f"Initializing field {name} ({model})")
+        #     if model[1] == "FrozenObject":
+        #         print(f"Setting frozen attr: {name}")
+        #         setattr(self, name, FrozenObject(self.raw[name]))
+        #     elif model[1] == "ForeignKey":
+        #         raise Exception("Unexpected item in the bagging area")
+        #     elif model[1] == "OneToOneField":
+        #         raise Exception("Unexpected item in the bagging area")
+        #     elif model[1] == "ManyToManyField":
+        #         raise Exception("Unexpected item in the bagging area")
+        #     else:
+        #         field = self.get_field(name)
+        #         value = self.raw[name]
+        #         print(f"Setting attr: {name}={value}")
+        #         value = field.to_python(value)
+        #         setattr(self, name, value)
+
+    def __str__(self):
+        return f"FrozenObject[{self.model}]"
 
     def __setattr__(self, name: str, value: object) -> None:
         """Prevent setting of frozen attributes."""
@@ -89,6 +111,9 @@ class FrozenObject:
         the way down.
 
         """
+        if name in self.exclude:
+            raise ExcludedAttribute
+
         try:
             field_klass = self.get_field(name)
         except KeyError:
@@ -111,13 +136,18 @@ class FrozenObject:
         return field_klass().to_python(value)
 
     @property
-    def label(self) -> str:
+    def model(self) -> str:
         """Return name of the model that is being frozen."""
-        return self.raw["meta"]["label"]
+        return self.raw["meta"]["model"]
 
     @property
     def fields(self) -> dict[str, tuple[str, str]]:
         return self.raw["meta"]["fields"]
+
+    @property
+    def exclude(self) -> list[str]:
+        """List of field names to exclude in serialization."""
+        return self.raw["meta"]["exclude"]
 
     def save(self, *args: object, **kwargs: object) -> NoReturn:
         raise StaleObjectError
@@ -128,7 +158,12 @@ class FrozenObject:
         return getattr(import_module(module), klass)
 
     @classmethod
-    def from_object(cls, instance: models.Model) -> FrozenObject | None:
+    def from_object(
+        cls,
+        instance: models.Model,
+        deep_freeze: bool = False,
+        exclude: list[str] | None = None,
+    ) -> FrozenObject | None:
         """Convert model to FrozenObject."""
         # print(f"from_object: {instance}")
         if instance is None:
@@ -136,34 +171,41 @@ class FrozenObject:
         obj_data = {
             "meta": {
                 "frozen_at": tz_now(),
-                "label": instance._meta.label,
+                "model": instance._meta.label,
                 "id": instance.id,
                 "fields": {},
+                "deep_freeze": deep_freeze,
+                "exclude": exclude
             }
         }
-        # print(f"BEFORE: {obj_data}")
+        print(f"BEFORE: {obj_data}")
         for field in instance._meta.local_fields:
+            if field.name in exclude:
+                continue
+            if isinstance(field, RelatedField) and not deep_freeze:
+                obj_data["meta"]["exclude"].append(field.name)
+                continue
             obj_data["meta"]["fields"][field.name] = (
                 field.__class__.__module__,
                 field.__class__.__qualname__,
             )
             value = getattr(instance, field.name)
-            # print(f">>> processing field {field}")
+            print(f">>> processing field {field}")
             # recursively serialize all FKs
             if isinstance(field, JSONField):
-                # print(f"..processing JSONField {field.name}:{value}")
+                print(f"..processing JSONField {field.name}:{value}")
                 obj_data[field.name] = field.get_prep_value(value)
             elif isinstance(value, models.Model):
-                # print(f"..processing FK {field.name}:{value}")
+                print(f"..processing FK {field.name}:{value}")
                 obj = cls.from_object(value)
                 if obj:
                     obj_data[field.name] = obj.raw
             elif isinstance(value, cls):
-                # print(f"..processing FrozenObject {field.name}:{value}")
+                print(f"..processing FrozenObject {field.name}:{value}")
                 obj_data[field.name] = value.raw
             else:
-                # print(f"..processing {field} {field.name}:{value}")
+                print(f"..processing {field} {field.name}:{value}")
                 obj_data[field.name] = field.get_prep_value(value)
-            # print(f"<<< output {obj_data[field.name]}")
-        # print(f"AFTER: {obj_data}")
+            print(f"<<< output {obj_data[field.name]}")
+        print(f"AFTER: {obj_data}")
         return FrozenObject(obj_data)
