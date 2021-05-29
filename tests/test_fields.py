@@ -63,8 +63,8 @@ class TestFrozenObjectField:
     def test_deep_nested(self, nested):
         deep_nested = DeepNestedModel.objects.create(fresh=nested, frozen=nested)
         deep_nested.refresh_from_db()
-        assert deep_nested.fresh == deep_nested.frozen
+        assert deep_nested.fresh.id == deep_nested.frozen.id
         print(deep_nested.frozen.frozen)
         print(type(deep_nested.frozen.frozen))
         print(type(deep_nested.frozen))
-        assert deep_nested.fresh.fresh == deep_nested.frozen.frozen
+        assert deep_nested.fresh.fresh.id == deep_nested.frozen.frozen.id
