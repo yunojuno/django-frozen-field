@@ -8,13 +8,13 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.fields import Field
 from django.db.models.fields.json import JSONField
-from django.db.models.fields.related import ForeignKey, RelatedField
+from django.db.models.fields.related import RelatedField
 from django.utils.timezone import now as tz_now
 
 from frozen_data.exceptions import ExcludedAttribute, FrozenAttribute, StaleObjectError
 
 
-def validate_raw(self, value: dict) -> None:
+def validate_raw(value: dict) -> None:
     """Validate the raw contents."""
     if "meta" not in value:
         raise ValidationError("Missing meta key.")
@@ -22,11 +22,15 @@ def validate_raw(self, value: dict) -> None:
     if "model" not in value["meta"]:
         raise ValidationError("Missing meta.model key.")
 
+    if not value["meta"]["model"]:
+        raise ValidationError("Empty meta.model key.")
+
     if "fields" not in value["meta"]:
         raise ValidationError("Missing meta.fields key.")
 
     if "exclude" not in value["meta"]:
         raise ValidationError("Missing meta.exclude key.")
+
 
 class FrozenObject:
     """
@@ -37,7 +41,7 @@ class FrozenObject:
 
         {
             "meta": {
-                "label": "core.Address",
+                "model": "core.Address",
                 "frozen_at": "2021-05-28T16:42:43.829687+00:00",
                 "fields": {
                     "id": ("django.db.models", "IntegerField"),
@@ -90,7 +94,7 @@ class FrozenObject:
     def __init__(self, frozen_data: dict) -> None:
         self.raw = frozen_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"FrozenObject[{self.model}]"
 
     def __setattr__(self, name: str, value: object) -> None:
@@ -100,9 +104,11 @@ class FrozenObject:
             # if we are deeply nested, this may be a str, not a dict
             if isinstance(value, str):
                 value = json.loads(value)
-            self.validate_raw(value)
-            super().__setattr__(name, value)
-            return
+            if isinstance(value, dict):
+                self.validate_raw(value)
+                super().__setattr__(name, value)
+                return
+            raise ValueError("raw must be a dict, or parseable str.")
         # # allow other arbitrary fields through if not in the frozen set
         # if name not in self.fields:
         #     return super().__setattr__(name, value)
@@ -128,9 +134,7 @@ class FrozenObject:
             raise ExcludedAttribute
 
         if name not in self.fields:
-            raise AttributeError(
-                f"{self} has no attribute '{name}'"
-            )
+            raise AttributeError(f"{self} has no attribute '{name}'")
 
         field_klass = self.get_field_class(name)
         value = self.raw[name]
@@ -171,7 +175,7 @@ class FrozenObject:
         return getattr(import_module(module), klass)
 
     @classmethod
-    def from_object(
+    def from_object(  # noqa: C901
         cls,
         instance: models.Model,
         deep_freeze: bool = False,
@@ -193,7 +197,7 @@ class FrozenObject:
         }
         print(f"BEFORE: {obj_data}")
         for field in instance._meta.local_fields:
-            if field.name in exclude:
+            if exclude and field.name in exclude:
                 continue
             if isinstance(field, RelatedField) and not deep_freeze:
                 obj_data["meta"]["exclude"].append(field.name)
