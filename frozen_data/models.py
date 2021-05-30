@@ -4,6 +4,7 @@ import json
 from importlib import import_module
 from typing import NoReturn
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.fields import Field
 from django.db.models.fields.json import JSONField
@@ -12,6 +13,20 @@ from django.utils.timezone import now as tz_now
 
 from frozen_data.exceptions import ExcludedAttribute, FrozenAttribute, StaleObjectError
 
+
+def validate_raw(self, value: dict) -> None:
+    """Validate the raw contents."""
+    if "meta" not in value:
+        raise ValidationError("Missing meta key.")
+
+    if "model" not in value["meta"]:
+        raise ValidationError("Missing meta.model key.")
+
+    if "fields" not in value["meta"]:
+        raise ValidationError("Missing meta.fields key.")
+
+    if "exclude" not in value["meta"]:
+        raise ValidationError("Missing meta.exclude key.")
 
 class FrozenObject:
     """
@@ -58,26 +73,22 @@ class FrozenObject:
 
     """
 
+    def validate_raw(self, value: dict) -> None:
+        """Validate the raw contents."""
+        if "meta" not in value:
+            raise ValidationError("Missing meta key.")
+
+        if "model" not in value["meta"]:
+            raise ValidationError("Missing meta.model key.")
+
+        if "fields" not in value["meta"]:
+            raise ValidationError("Missing meta.fields key.")
+
+        if "exclude" not in value["meta"]:
+            raise ValidationError("Missing meta.exclude key.")
+
     def __init__(self, frozen_data: dict) -> None:
         self.raw = frozen_data
-        # print(f"FIELDS: {self.fields}")
-        # for name, model in self.fields.items():
-        #     print(f"Initializing field {name} ({model})")
-        #     if model[1] == "FrozenObject":
-        #         print(f"Setting frozen attr: {name}")
-        #         setattr(self, name, FrozenObject(self.raw[name]))
-        #     elif model[1] == "ForeignKey":
-        #         raise Exception("Unexpected item in the bagging area")
-        #     elif model[1] == "OneToOneField":
-        #         raise Exception("Unexpected item in the bagging area")
-        #     elif model[1] == "ManyToManyField":
-        #         raise Exception("Unexpected item in the bagging area")
-        #     else:
-        #         field = self.get_field(name)
-        #         value = self.raw[name]
-        #         print(f"Setting attr: {name}={value}")
-        #         value = field.to_python(value)
-        #         setattr(self, name, value)
 
     def __str__(self):
         return f"FrozenObject[{self.model}]"
@@ -89,10 +100,12 @@ class FrozenObject:
             # if we are deeply nested, this may be a str, not a dict
             if isinstance(value, str):
                 value = json.loads(value)
-            return super().__setattr__(name, value)
-        # allow other arbitrary fields through if not in the frozen set
-        if name not in self.fields:
-            return super().__setattr__(name, value)
+            self.validate_raw(value)
+            super().__setattr__(name, value)
+            return
+        # # allow other arbitrary fields through if not in the frozen set
+        # if name not in self.fields:
+        #     return super().__setattr__(name, value)
         # prevent frozen attributes from being set
         raise FrozenAttribute
 
@@ -114,15 +127,15 @@ class FrozenObject:
         if name in self.exclude:
             raise ExcludedAttribute
 
-        try:
-            field_klass = self.get_field(name)
-        except KeyError:
+        if name not in self.fields:
             raise AttributeError(
-                f"FrozenObject[{self.label}] has no attribute '{name}'"
+                f"{self} has no attribute '{name}'"
             )
-        else:
-            value = self.raw[name]
-            # print(f"getting value {value} for field {field_klass}")
+
+        field_klass = self.get_field_class(name)
+        value = self.raw[name]
+
+        # print(f"getting value {value} for field {field_klass}")
         from .fields import FrozenObjectField
 
         if issubclass(field_klass, FrozenObjectField):
@@ -152,7 +165,7 @@ class FrozenObject:
     def save(self, *args: object, **kwargs: object) -> NoReturn:
         raise StaleObjectError
 
-    def get_field(self, name: str) -> Field:
+    def get_field_class(self, name: str) -> Field:
         """Return the field represented by the name."""
         module, klass = self.fields[name]
         return getattr(import_module(module), klass)
@@ -175,7 +188,7 @@ class FrozenObject:
                 "id": instance.id,
                 "fields": {},
                 "deep_freeze": deep_freeze,
-                "exclude": exclude
+                "exclude": exclude,
             }
         }
         print(f"BEFORE: {obj_data}")

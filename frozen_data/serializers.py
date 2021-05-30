@@ -8,7 +8,7 @@
 
 # def get_model_field(app_model: models.Model, field_name: str) -> models.Field:
 #     """Return a model's Field object from its name."""
-#     return app_model._meta.get_field(field_name)
+#     return app_model._meta.get_field_class(field_name)
 
 
 # def deserialize(app_model: models.Model, **frozen_model_data: object) -> object:
