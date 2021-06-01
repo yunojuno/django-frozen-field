@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 from django.utils.timezone import now as tz_now
 
-from frozen_data.exceptions import StaleObjectError
+from frozen_data.exceptions import FrozenObjectError
 
 from .models import DeepNestedModel, FlatModel, NestedModel
 

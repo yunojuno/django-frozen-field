@@ -11,7 +11,29 @@ from django.db.models.fields.json import JSONField
 from django.db.models.fields.related import RelatedField
 from django.utils.timezone import now as tz_now
 
-from frozen_data.exceptions import ExcludedAttribute, FrozenAttribute, StaleObjectError
+from frozen_data.exceptions import (
+    FrozenAttributeError,
+    FrozenObjectError,
+    MissingAttributeError,
+)
+
+# mypy hints
+ModelName = str
+ModelKlass = str
+AttributeName = str
+Timestamp = str
+
+
+class FrozenObjectMeta:
+    """Dataclass for object metadata."""
+
+    model: ModelName
+    frozen_at: Timestamp
+    fields: dict[AttributeName, ModelKlass]
+    exclude: list[AttributeName]
+    include: list[AttributeName]
+    select_related: list[AttributeName]
+    select_properties: list[AttributeName]
 
 
 def validate_raw(value: dict) -> None:
@@ -47,7 +69,10 @@ class FrozenObject:
                     "id": ("django.db.models", "IntegerField"),
                     "line_1": ("django.db.models", ""CharField"),
                     "user": ("frozen_data.models", "FrozenObject")
-                }
+                },
+                "exclude": [],
+                "include": [],
+                "add_related": []
             },
             "id": 1,
             "line_1": "29 Acacia Avenue",
@@ -113,7 +138,7 @@ class FrozenObject:
         # if name not in self.fields:
         #     return super().__setattr__(name, value)
         # prevent frozen attributes from being set
-        raise FrozenAttribute
+        raise FrozenAttributeError
 
     def __getattr__(self, name: str) -> object:
         """
@@ -131,10 +156,10 @@ class FrozenObject:
 
         """
         if name in self.exclude:
-            raise ExcludedAttribute
+            raise MissingAttributeError(name)
 
-        if name not in self.fields:
-            raise AttributeError(f"{self} has no attribute '{name}'")
+        if name not in self.fields.keys():
+            raise MissingAttributeError(name)
 
         field_klass = self.get_field_class(name)
         value = self.raw[name]
@@ -152,13 +177,16 @@ class FrozenObject:
             value = json.loads(value)
         return field_klass().to_python(value)
 
+    def __dir__(self) -> list[str]:
+        return [k for k, v in self.fields.items() if v[1] == "STORE"]
+
     @property
     def model(self) -> str:
         """Return name of the model that is being frozen."""
         return self.raw["meta"]["model"]
 
     @property
-    def fields(self) -> dict[str, tuple[str, str]]:
+    def fields(self) -> dict[str, str]:
         return self.raw["meta"]["fields"]
 
     @property
@@ -166,12 +194,27 @@ class FrozenObject:
         """List of field names to exclude in serialization."""
         return self.raw["meta"]["exclude"]
 
+    @property
+    def include(self) -> list[str]:
+        """List of field names to include in serialization."""
+        return self.raw["meta"]["include"]
+
+    @property
+    def select_related(self) -> list[str]:
+        """List of related fields to include in serialization."""
+        return self.raw["meta"]["select_related"]
+
+    @property
+    def select_properties(self) -> list[str]:
+        """List of object properties to include in serialization."""
+        return self.raw["meta"]["select_properties"]
+
     def save(self, *args: object, **kwargs: object) -> NoReturn:
-        raise StaleObjectError
+        raise FrozenObjectError
 
     def get_field_class(self, name: str) -> Field:
         """Return the field represented by the name."""
-        module, klass = self.fields[name]
+        module, klass = self.fields[name].rsplit(".", 1)
         return getattr(import_module(module), klass)
 
     @classmethod
