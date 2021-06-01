@@ -56,7 +56,7 @@ class TestFrozenObjectField:
 
     def test_nested(self, nested):
         nested.refresh_from_db()
-        with pytest.raises(StaleObjectError):
+        with pytest.raises(FrozenObjectError):
             nested.frozen.save()
         nested.fresh.save()
 

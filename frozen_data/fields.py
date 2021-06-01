@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import json
-from typing import cast
+import dataclasses
 
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
-from django.db.models.base import Model
 from django.utils.translation import gettext_lazy as _lazy
 
-from frozen_data.models import FrozenObject
+from frozen_data.models import freeze_object
 
 
 class FrozenObjectField(models.JSONField):
@@ -27,10 +25,10 @@ class FrozenObjectField(models.JSONField):
 
     def __init__(
         self,
-        *args: object,
-        deep_freeze: bool = False,
+        app_model: models.Model,
+        include: list[str] | None = None,
         exclude: list[str] | None = None,
-        **kwargs: object,
+        **json_field_kwargs: object
     ) -> None:
         """
         Initialise FrozenObjectField.
@@ -41,56 +39,33 @@ class FrozenObjectField(models.JSONField):
             be ignored.
 
         """
-        self.deep_freeze = deep_freeze
+        self.related_model = app_model
+        self.include = include or []
         self.exclude = exclude or []
-        kwargs["encoder"] = DjangoJSONEncoder
-        super().__init__(*args, **kwargs)
+        json_field_kwargs["encoder"] = DjangoJSONEncoder
+        super().__init__(**json_field_kwargs)
 
     def deconstruct(self) -> tuple[str, str, list, dict]:
         name, path, args, kwargs = super().deconstruct()
         del kwargs["encoder"]
+        args = ["app_model"]
         return name, path, args, kwargs
 
-    def to_python(self, value: object) -> FrozenObject | None:
-        if value is None:
-            return None
-
-        from .models import FrozenObject  # noqa: circ import
-
-        if isinstance(value, FrozenObject):
-            return value
-
-        return FrozenObject(cast(dict, value))
+    def to_python(self, value: object) -> object | None:
+        raise NotImplementedError
 
     def from_db_value(
         self, value: object, expression: object, connection: object
     ) -> object | None:
         """Deserialize db contents back into original model."""
-        if value is None:
-            return value
+        raise NotImplementedError
 
-        # print(f"DESERIALIZING FROM {value}")
-        if not isinstance(value, str):
-            raise Exception("Invalid from_db_value")
-        frozen_data = json.loads(value)
-        return FrozenObject(frozen_data)
-
-    def get_prep_value(self, value: Model | FrozenObject | None) -> dict | None:
+    def get_prep_value(self, value: object | None) -> dict | None:
         # JSONField expects a dict, so serialize the object first
         if value is None:
             return value
 
-        # print(f"GET_PREP_VALUE for: {value}")
-        # from .models import FrozenObject
         if isinstance(value, models.Model):
-            value = FrozenObject.from_object(
-                value,
-                deep_freeze=self.deep_freeze,
-                exclude=self.exclude,
-            )
+            value = freeze_object(value, include=self.include, exclude=self.exclude)
 
-        # if it's not a model we assume it is a FrozenObject already
-        # print(f"SERIALIZING: {value}")
-        value = super().get_prep_value(value.raw)
-        # print(f"SERIALIZED AS: {value}")
-        return value
+        return super().get_prep_value(dataclasses.asdict(value))

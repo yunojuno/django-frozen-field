@@ -1,271 +1,143 @@
 from __future__ import annotations
 
-import json
+import dataclasses
 from importlib import import_module
-from typing import NoReturn
 
-from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.fields import Field
-from django.db.models.fields.json import JSONField
-from django.db.models.fields.related import RelatedField
 from django.utils.timezone import now as tz_now
-
-from frozen_data.exceptions import (
-    FrozenAttributeError,
-    FrozenObjectError,
-    MissingAttributeError,
-)
 
 # mypy hints
 ModelName = str
 ModelKlass = str
 AttributeName = str
+AttributeList = list[AttributeName]
 Timestamp = str
 
 
+@dataclasses.dataclass
 class FrozenObjectMeta:
-    """Dataclass for object metadata."""
+    """Dataclass for frozen object metadata, extracted from model._meta."""
 
     model: ModelName
-    frozen_at: Timestamp
     fields: dict[AttributeName, ModelKlass]
-    exclude: list[AttributeName]
     include: list[AttributeName]
-    select_related: list[AttributeName]
-    select_properties: list[AttributeName]
-
-
-def validate_raw(value: dict) -> None:
-    """Validate the raw contents."""
-    if "meta" not in value:
-        raise ValidationError("Missing meta key.")
-
-    if "model" not in value["meta"]:
-        raise ValidationError("Missing meta.model key.")
-
-    if not value["meta"]["model"]:
-        raise ValidationError("Empty meta.model key.")
-
-    if "fields" not in value["meta"]:
-        raise ValidationError("Missing meta.fields key.")
-
-    if "exclude" not in value["meta"]:
-        raise ValidationError("Missing meta.exclude key.")
-
-
-class FrozenObject:
-    """
-    Container for an object that looks like a frozen model.
-
-    This class id designed to manage the deserialization (unfreezing)
-    of data in the following form:
-
-        {
-            "meta": {
-                "model": "core.Address",
-                "frozen_at": "2021-05-28T16:42:43.829687+00:00",
-                "fields": {
-                    "id": ("django.db.models", "IntegerField"),
-                    "line_1": ("django.db.models", ""CharField"),
-                    "user": ("frozen_data.models", "FrozenObject")
-                },
-                "exclude": [],
-                "include": [],
-                "add_related": []
-            },
-            "id": 1,
-            "line_1": "29 Acacia Avenue",
-            "user": {
-                "meta": {
-                    "label": "auth.User",
-                    "frozen_at": "...",
-                    "fields": {
-                        "id": "django.db.models.IntegerField",
-                        "first_name": "django.db.models.CharField",
-                        "last_name": "django.db.models.CharField"
-                    }
-                },
-                "id": 1,
-                "first_name": "Eric",
-                "last_name": "Bananaman"
-            }
-        }
-
-    When deserialized this object will support:
-
-        >>> fo = FrozenObject({...})
-        >>> fo.line_1
-        '29 Acacia Avenue'
-        >>> fo.user.first_name
-        'Eric'
-
-    """
-
-    def validate_raw(self, value: dict) -> None:
-        """Validate the raw contents."""
-        if "meta" not in value:
-            raise ValidationError("Missing meta key.")
-
-        if "model" not in value["meta"]:
-            raise ValidationError("Missing meta.model key.")
-
-        if "fields" not in value["meta"]:
-            raise ValidationError("Missing meta.fields key.")
-
-        if "exclude" not in value["meta"]:
-            raise ValidationError("Missing meta.exclude key.")
-
-    def __init__(self, frozen_data: dict) -> None:
-        self.raw = frozen_data
-
-    def __str__(self) -> str:
-        return f"FrozenObject[{self.model}]"
-
-    def __setattr__(self, name: str, value: object) -> None:
-        """Prevent setting of frozen attributes."""
-        # this is the first propert set, so must pass through
-        if name == "raw":
-            # if we are deeply nested, this may be a str, not a dict
-            if isinstance(value, str):
-                value = json.loads(value)
-            if isinstance(value, dict):
-                self.validate_raw(value)
-                super().__setattr__(name, value)
-                return
-            raise ValueError("raw must be a dict, or parseable str.")
-        # # allow other arbitrary fields through if not in the frozen set
-        # if name not in self.fields:
-        #     return super().__setattr__(name, value)
-        # prevent frozen attributes from being set
-        raise FrozenAttributeError
-
-    def __getattr__(self, name: str) -> object:
-        """
-        Extract value from raw data.
-
-        This method is only called if the attr requested is not found
-        via the usual routes - i.e. on the object already.
-
-        For non-related fields this uses the stored field type to
-        convert the JSON value back to its python equivalent.
-
-        For related fields, which are all serialized as "FrozenObject"
-        fields, we return a nested FrozenObject instance. Turtles all
-        the way down.
-
-        """
-        if name in self.exclude:
-            raise MissingAttributeError(name)
-
-        if name not in self.fields.keys():
-            raise MissingAttributeError(name)
-
-        field_klass = self.get_field_class(name)
-        value = self.raw[name]
-
-        # print(f"getting value {value} for field {field_klass}")
-        from .fields import FrozenObjectField
-
-        if issubclass(field_klass, FrozenObjectField):
-            # found nested FrozenObject
-            return FrozenObject(value)
-        if issubclass(field_klass, (models.ForeignKey, models.OneToOneField)):
-            # found nested FK
-            return FrozenObject(value)
-        if issubclass(field_klass, JSONField) and isinstance(value, str):
-            value = json.loads(value)
-        return field_klass().to_python(value)
-
-    def __dir__(self) -> list[str]:
-        return [k for k, v in self.fields.items() if v[1] == "STORE"]
-
-    @property
-    def model(self) -> str:
-        """Return name of the model that is being frozen."""
-        return self.raw["meta"]["model"]
-
-    @property
-    def fields(self) -> dict[str, str]:
-        return self.raw["meta"]["fields"]
-
-    @property
-    def exclude(self) -> list[str]:
-        """List of field names to exclude in serialization."""
-        return self.raw["meta"]["exclude"]
-
-    @property
-    def include(self) -> list[str]:
-        """List of field names to include in serialization."""
-        return self.raw["meta"]["include"]
-
-    @property
-    def select_related(self) -> list[str]:
-        """List of related fields to include in serialization."""
-        return self.raw["meta"]["select_related"]
-
-    @property
-    def select_properties(self) -> list[str]:
-        """List of object properties to include in serialization."""
-        return self.raw["meta"]["select_properties"]
-
-    def save(self, *args: object, **kwargs: object) -> NoReturn:
-        raise FrozenObjectError
+    exclude: list[AttributeName]
+    frozen_at: Timestamp
 
     def get_field_class(self, name: str) -> Field:
-        """Return the field represented by the name."""
+        """Return the Field class represented by the name."""
         module, klass = self.fields[name].rsplit(".", 1)
         return getattr(import_module(module), klass)
 
-    @classmethod
-    def from_object(  # noqa: C901
-        cls,
-        instance: models.Model,
-        deep_freeze: bool = False,
-        exclude: list[str] | None = None,
-    ) -> FrozenObject | None:
-        """Convert model to FrozenObject."""
-        # print(f"from_object: {instance}")
-        if instance is None:
-            return instance
-        obj_data = {
-            "meta": {
-                "frozen_at": tz_now(),
-                "model": instance._meta.label,
-                "id": instance.id,
-                "fields": {},
-                "deep_freeze": deep_freeze,
-                "exclude": exclude,
-            }
-        }
-        print(f"BEFORE: {obj_data}")
-        for field in instance._meta.local_fields:
-            if exclude and field.name in exclude:
-                continue
-            if isinstance(field, RelatedField) and not deep_freeze:
-                obj_data["meta"]["exclude"].append(field.name)
-                continue
-            obj_data["meta"]["fields"][field.name] = (
-                field.__class__.__module__,
-                field.__class__.__qualname__,
+    def get_object_values(self, obj: models.Model) -> dict[str, object]:
+        """Return {name: value} dict from an instance of the model."""
+        if obj._meta.label != self.model:
+            raise ValueError(
+                f"Incorrect object type; expected {self.model}, got {obj._meta.label}."
             )
-            value = getattr(instance, field.name)
-            print(f">>> processing field {field}")
-            # recursively serialize all FKs
-            if isinstance(field, JSONField):
-                print(f"..processing JSONField {field.name}:{value}")
-                obj_data[field.name] = field.get_prep_value(value)
-            elif isinstance(value, models.Model):
-                print(f"..processing FK {field.name}:{value}")
-                obj = cls.from_object(value)
-                if obj:
-                    obj_data[field.name] = obj.raw
-            elif isinstance(value, cls):
-                print(f"..processing FrozenObject {field.name}:{value}")
-                obj_data[field.name] = value.raw
+        values: dict[str, object] = {}
+        for f in self.include:
+            val = getattr(obj, f)
+            if isinstance(val, models.Model):
+                frozen_obj = freeze_object(val)
+                values[f] = dataclasses.asdict(frozen_obj)
             else:
-                print(f"..processing {field} {field.name}:{value}")
-                obj_data[field.name] = field.get_prep_value(value)
-            print(f"<<< output {obj_data[field.name]}")
-        print(f"AFTER: {obj_data}")
-        return FrozenObject(obj_data)
+                values[f] = val
+        return values
+
+
+def create_meta(
+    obj: models.Model,
+    include: AttributeList | None = None,
+    exclude: AttributeList | None = None,
+    select_related: AttributeList | None = None,
+) -> FrozenObjectMeta:
+    """
+    Create a new meta object from a model instance.
+
+    The rules around the field parsing is as follows:
+
+    * By default, all non-related attrs are "included"
+    * By details, all related attrs are "excluded"
+    * "included" and "excluded" are mutually exclusive
+    * "included" takes precedence - use to select a subset of fields
+    * "excluded" is used to remove fields from the default set
+    * "fields" contains all of the local fields on the model,
+        regardless of whether they are included or excluded - this
+        is the master list of properties at the point of freezing.
+    * "select_related" contains any additional related fields that should be
+        added to the "include" list. Empty by default.
+
+    All of the above are parsed to produce two lists - "include" and "exclude" that
+    contain all of the local_fields.
+
+    """
+    if not isinstance(obj, models.Model):
+        raise ValueError("'obj' must be a Django model")
+
+    def fq(field: Field) -> str:
+        return f"{field.__class__.__module__}.{field.__class__.__qualname__}"
+
+    def copy_attr_list(attr_list: AttributeList | None) -> AttributeList:
+        if attr_list:
+            return attr_list.copy()
+        return []
+
+    _include = copy_attr_list(include) + copy_attr_list(select_related)
+    _exclude = copy_attr_list(exclude)
+
+    if _include and _exclude:
+        raise ValueError("'include' and 'exclude' are mutually exclusive.")
+
+    # the complete list of fields, included or not
+    _all = obj._meta.local_fields
+
+    # include all fields that are neither related nor in exclude
+    if not _include:
+        _include = [
+            f.name for f in _all if f.name not in _exclude and not f.related_model
+        ]
+
+    # exclude all related fields and those not in _include
+    if not _exclude:
+        _exclude = [f.name for f in _all if f.name not in _include]
+
+    return FrozenObjectMeta(
+        model=obj._meta.label,
+        fields={f.name: fq(f) for f in _all},
+        include=_include,
+        exclude=_exclude,
+        frozen_at=tz_now(),
+    )
+
+
+def freeze_object(
+    obj: models.Model,
+    include: AttributeList | None = None,
+    exclude: AttributeList | None = None,
+) -> object:
+    """Create dynamic dataclass mapping object properties."""
+    meta = create_meta(obj, include=include, exclude=exclude)
+    klass = dataclasses.make_dataclass(
+        cls_name=meta.model,
+        fields=["meta"] + meta.include,
+        frozen=True,
+    )
+    return klass(meta=meta, **meta.get_object_values(obj))
+
+
+def unfreeze_object(frozen_object: dict) -> object:
+    """Deserialize a frozen object from stored JSON."""
+    if isinstance(frozen_object, str):  # type: ignore [unreachable]
+        # include this "unreachable" condition as str <> dict is a really
+        # common gotcha - json.dumps/loads confusion.
+        raise ValueError("'frozen_object' is a str - did you dump JSON?")
+    meta = FrozenObjectMeta(**frozen_object["meta"])
+    values = {k: v for k, v in frozen_object.items() if k != "meta"}
+    klass = dataclasses.make_dataclass(
+        cls_name=meta.model,
+        fields=["meta"] + meta.include,
+        frozen=True,
+    )
+    return klass(meta=meta, **values)
