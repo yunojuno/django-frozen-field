@@ -7,12 +7,7 @@ from django.db import models
 from django.db.models.fields import Field
 from django.utils.timezone import now as tz_now
 
-# mypy hints
-ModelName = str
-ModelKlass = str
-AttributeName = str
-AttributeList = list[AttributeName]
-Timestamp = str
+from .types import AttributeList, AttributeName, IsoTimestamp, ModelKlass, ModelName
 
 
 @dataclasses.dataclass
@@ -23,15 +18,27 @@ class FrozenObjectMeta:
     fields: dict[AttributeName, ModelKlass]
     include: list[AttributeName]
     exclude: list[AttributeName]
-    frozen_at: Timestamp
+    frozen_at: IsoTimestamp
 
-    def get_field_class(self, name: str) -> Field:
-        """Return the Field class represented by the name."""
-        module, klass = self.fields[name].rsplit(".", 1)
-        return getattr(import_module(module), klass)
+    @property
+    def cls_name(self) -> str:
+        """Return a new class name for dataclass created from this meta object."""
+        return f"Frozen{self.model.split('.')[-1]}"
 
-    def get_object_values(self, obj: models.Model) -> dict[str, object]:
-        """Return {name: value} dict from an instance of the model."""
+    def get_dataclass(self) -> type:
+        """Create dynamic dataclass from the meta info."""
+        return dataclasses.make_dataclass(
+            cls_name=self.cls_name,
+            fields=["meta"] + self.include,
+            frozen=True,
+        )
+
+    def get_dataclass_instance(self, **values: object) -> object:
+        """Create dynamic dataclass instance from the meta info and values."""
+        return self.get_dataclass()(self, **values)
+
+    def extract_model_values(self, obj: models.Model) -> dict[str, object]:
+        """Extract {name: value} dict from a model instance using meta info."""
         if obj._meta.label != self.model:
             raise ValueError(
                 f"Incorrect object type; expected {self.model}, got {obj._meta.label}."
@@ -45,6 +52,16 @@ class FrozenObjectMeta:
             else:
                 values[f] = val
         return values
+
+    def _field(self, name: str) -> Field:
+        """Return the Field class represented by the name."""
+        module, klass = self.fields[name].rsplit(".", 1)
+        return getattr(import_module(module), klass)
+
+    def cast_field(self, field_name: str, value: object) -> object:
+        """Cast value using its underlying field.to_python method."""
+        field = self._field(field_name)
+        return field().to_python(value)
 
 
 def create_meta(
@@ -116,15 +133,17 @@ def freeze_object(
     obj: models.Model,
     include: AttributeList | None = None,
     exclude: AttributeList | None = None,
+    select_related: AttributeList | None = None,
 ) -> object:
     """Create dynamic dataclass mapping object properties."""
-    meta = create_meta(obj, include=include, exclude=exclude)
-    klass = dataclasses.make_dataclass(
-        cls_name=meta.model,
-        fields=["meta"] + meta.include,
-        frozen=True,
+    meta = create_meta(
+        obj,
+        include=include,
+        exclude=exclude,
+        select_related=select_related,
     )
-    return klass(meta=meta, **meta.get_object_values(obj))
+    values = meta.extract_model_values(obj)
+    return meta.get_dataclass_instance(**values)
 
 
 def unfreeze_object(frozen_object: dict) -> object:
@@ -132,12 +151,16 @@ def unfreeze_object(frozen_object: dict) -> object:
     if isinstance(frozen_object, str):  # type: ignore [unreachable]
         # include this "unreachable" condition as str <> dict is a really
         # common gotcha - json.dumps/loads confusion.
-        raise ValueError("'frozen_object' is a str - did you dump JSON?")
+        raise ValueError("'frozen_object' is a str - please use json.loads")
+
     meta = FrozenObjectMeta(**frozen_object["meta"])
-    values = {k: v for k, v in frozen_object.items() if k != "meta"}
-    klass = dataclasses.make_dataclass(
-        cls_name=meta.model,
-        fields=["meta"] + meta.include,
-        frozen=True,
-    )
-    return klass(meta=meta, **values)
+    values: dict[str, object] = {}
+    for k, v in frozen_object.items():
+        if k == "meta":
+            continue
+        # if we find another frozen object, recurse
+        elif isinstance(v, dict) and "meta" in v:
+            values[k] = unfreeze_object(v)
+        else:
+            values[k] = meta.cast_field(k, v)
+    return meta.get_dataclass_instance(**values)
