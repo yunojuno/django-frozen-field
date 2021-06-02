@@ -1,6 +1,6 @@
 from django.db import models
 
-from frozen_data.fields import FrozenObjectField
+from frozen_field.fields import FrozenObjectField
 
 
 class FlatModel(models.Model):

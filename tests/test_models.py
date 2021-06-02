@@ -4,7 +4,7 @@ import json
 import pytest
 from django.core.serializers.json import DjangoJSONEncoder
 
-from frozen_data.models import create_meta, freeze_object, unfreeze_object
+from frozen_field.models import create_meta, freeze_object, unfreeze_object
 from tests.models import NestedModel
 from tests.test_fields import _flat
 
@@ -126,7 +126,4 @@ def test_load_frozen_object(flat):
     frozen_obj = freeze_object(nested_obj, include=["frozen", "fresh"])
     as_dict = dataclasses.asdict(frozen_obj)
     raw = json.dumps(as_dict, cls=DjangoJSONEncoder)
-    # print("raw", raw)
     refreshed = unfreeze_object(as_dict)
-    # assert refreshed == frozen_obj
-    # print(refreshed)

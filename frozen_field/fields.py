@@ -6,7 +6,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from django.utils.translation import gettext_lazy as _lazy
 
-from frozen_data.models import freeze_object, unfreeze_object
+from frozen_field.models import freeze_object, unfreeze_object
 
 from .types import AttributeList
 

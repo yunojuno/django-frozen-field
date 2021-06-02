@@ -2,4 +2,4 @@ from django.apps import AppConfig
 
 
 class FrozenDataConfig(AppConfig):
-    name = "frozen_data"
+    name = "frozen_field"

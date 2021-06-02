@@ -1,4 +1,4 @@
-# Django Frozen Object
+# Django Frozen Field
 
 Django model custom field for storing a frozen snapshot of an object.
 
