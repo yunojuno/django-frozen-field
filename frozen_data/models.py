@@ -56,7 +56,7 @@ class FrozenObjectMeta:
         """Return a new class name for dataclass created from this meta object."""
         return f"Frozen{self.model.split('.')[-1]}"
 
-    def get_dataclass(self) -> type:
+    def make_dataclass(self) -> type:
         """Create dynamic dataclass from the meta info."""
         return dataclasses.make_dataclass(
             cls_name=self.cls_name,
@@ -64,9 +64,9 @@ class FrozenObjectMeta:
             frozen=True,
         )
 
-    def get_dataclass_instance(self, **values: object) -> object:
+    def create_frozen_object(self, **values: object) -> object:
         """Create dynamic dataclass instance from the meta info and values."""
-        return self.get_dataclass()(self, **values)
+        return self.make_dataclass()(self, **values)
 
     def extract_model_values(self, obj: models.Model) -> dict[str, object]:
         """Extract {name: value} dict from a model instance using meta info."""
@@ -174,7 +174,7 @@ def freeze_object(
         select_related=select_related,
     )
     values = meta.extract_model_values(obj)
-    return meta.get_dataclass_instance(**values)
+    return meta.create_frozen_object(**values)
 
 
 def unfreeze_object(frozen_object: dict) -> object:
@@ -194,4 +194,4 @@ def unfreeze_object(frozen_object: dict) -> object:
             values[k] = unfreeze_object(v)
         else:
             values[k] = meta.cast_field(k, v)
-    return meta.get_dataclass_instance(**values)
+    return meta.create_frozen_object(**values)
