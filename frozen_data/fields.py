@@ -38,33 +38,32 @@ class FrozenObjectField(models.JSONField):
         args = ["app_model"]
         return name, path, args, kwargs
 
-    def to_python(self, value: object) -> object | None:
-        raise NotImplementedError(f"calling to_python with value='{value}'")
-
     def from_db_value(
         self, value: object, expression: object, connection: object
     ) -> object | None:
-        """Deserialize db contents back into original model."""
+        """Deserialize db contents (json) back into original frozen dataclass."""
         if value is None:
             return value
+        # use JSONField to convert from string to a dict
         value = super().from_db_value(value, expression, connection)
         return unfreeze_object(value)  # type: ignore [arg-type]
 
     def get_prep_value(self, value: object | None) -> dict | None:
+        """Convert frozen dataclass to stringified dict for serialization."""
         if value is None:
             return value
+        # use JSONField to convert dict to string
+        return super().get_prep_value(dataclasses.asdict(value))
 
-        if isinstance(value, models.Model):
-            obj = freeze_object(
-                value,
-                include=self.include,
-                exclude=self.exclude,
-                select_related=self.select_related,
-            )
-            retval = super().get_prep_value(dataclasses.asdict(obj))
-            return retval
-
-        if dataclasses.is_dataclass(value):
-            return dataclasses.asdict(value)
-
-        raise NotImplementedError(f"calling get_prep_value with value='{value}'")
+    def pre_save(self, model_instance: models.Model, add: bool) -> object:
+        """Convert Django model to a frozen dataclass before saving it."""
+        # I have been deep into the SQLUpdateCompiler to untangle what's going
+        # on and it appears that the model_instance passed in to this function
+        # is *not* the object being frozen, it's the parent / container. We need
+        # to ensure that the object being serialized is the field value. :shrug:
+        return freeze_object(
+            getattr(model_instance, self.attname),
+            include=self.include,
+            exclude=self.exclude,
+            select_related=self.select_related,
+        )

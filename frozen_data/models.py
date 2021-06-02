@@ -85,14 +85,15 @@ class FrozenObjectMeta:
         return values
 
     def _field(self, name: str) -> Field:
-        """Return the Field class represented by the name."""
+        """Return a Field object as represented by the field_name."""
         module, klass = self.fields[name].rsplit(".", 1)
-        return getattr(import_module(module), klass)
+        # force blank, null as we have to deal with whatever we are given
+        return getattr(import_module(module), klass)(blank=True, null=True)
 
-    def cast_field(self, field_name: str, value: object) -> object:
+    def _cast(self, field_name: str, value: object) -> object:
         """Cast value using its underlying field.to_python method."""
         field = self._field(field_name)
-        return field().to_python(value)
+        return field.to_python(value)
 
 
 def create_meta(
@@ -193,5 +194,5 @@ def unfreeze_object(frozen_object: dict) -> object:
         elif isinstance(v, dict) and "meta" in v:
             values[k] = unfreeze_object(v)
         else:
-            values[k] = meta.cast_field(k, v)
+            values[k] = meta._cast(k, v)
     return meta.create_frozen_object(**values)
