@@ -1,83 +1,69 @@
 from __future__ import annotations
 
-import json
-from typing import NoReturn
+import dataclasses
 
-from django.apps.registry import apps
-from django.core.exceptions import ValidationError
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
-from django.db.models.base import Model
 from django.utils.translation import gettext_lazy as _lazy
 
-from frozen_data.exceptions import StaleObjectError
-from frozen_data.serializers import deserialize, serialize
+from frozen_data.models import freeze_object, unfreeze_object
+
+from .types import AttributeList
 
 
-def _raise_stale_object_error() -> NoReturn:
-    """Patch model save method to raise StaleObjectError."""
-    raise StaleObjectError
-
-
-class FrozenDataField(models.JSONField):
-    """
-    Store snapshot of a model instance in a JSONField.
-
-    This field must be used in conjunction with the FrozenDataMixin class. The
-    field behaves exactly like a FK field - you set/get the field as the object,
-    but in the background it stores the object as a serialized snapshot. The object
-    that you get back is deserialized from this snapshot, and cannot be saved itself,
-    as this would overwrite newer data.
-
-    """
+class FrozenObjectField(models.JSONField):
+    """Store snapshot of a model instance in a JSONField."""
 
     description = _lazy("A frozen representation of a FK model")
 
     def __init__(
         self,
-        app_model: Model,
-        *args: object,
-        **kwargs: object,
+        app_model: models.Model,
+        include: AttributeList | None = None,
+        exclude: AttributeList | None = None,
+        select_related: AttributeList | None = None,
+        **json_field_kwargs: object,
     ) -> None:
-        kwargs["encoder"] = DjangoJSONEncoder
-        super().__init__(*args, **kwargs)
-        self.app_model: Model = app_model
+        """Initialise FrozenObjectField."""
+        self.related_model = app_model
+        self.include = include or []
+        self.exclude = exclude or []
+        self.select_related = select_related or []
+        json_field_kwargs["encoder"] = DjangoJSONEncoder
+        super().__init__(**json_field_kwargs)
 
     def deconstruct(self) -> tuple[str, str, list, dict]:
         name, path, args, kwargs = super().deconstruct()
-        args.insert(0, self.app_model)
+        del kwargs["encoder"]
+        args = ["app_model"]
         return name, path, args, kwargs
-
-    def to_python(self, value: object) -> object | None:
-        if value is None:
-            return None
-
-        if not isinstance(value, str):
-            raise ValidationError(f"Unable to convert value to {self.app_model}")
-
-        as_dict = json.loads(value)
-        klass = as_dict["meta"]["model"].split(".")
-        return deserialize(apps.get_model(*klass), **as_dict)
 
     def from_db_value(
         self, value: object, expression: object, connection: object
     ) -> object | None:
-        """Deserialize db contents back into original model."""
-        if not value:
-            return None
-        # as we subclass JSONField this will return a python dict
-        _value = super().from_db_value(value, expression, connection)
-        instance = deserialize(self.app_model, **_value)
-        # HACK: patch save method with one that will prevent saving.
-        instance.save = _raise_stale_object_error
-        return instance
+        """Deserialize db contents (json) back into original frozen dataclass."""
+        if value is None:
+            return value
+        # use JSONField to convert from string to a dict
+        value = super().from_db_value(value, expression, connection)
+        return unfreeze_object(value)  # type: ignore [arg-type]
 
-    def get_prep_value(self, value: object) -> dict | None:
-        # JSONField expects a dict, so serialize the object first
-        _value = serialize(value)
-        # this dumps the dict using the DjangoJSONEncoder
-        _value = super().get_prep_value(_value)
-        # store the value back on the object - indicates that
-        # we have serialized the object, and are about to save it.
-        value._raw = _value
-        return _value
+    def get_prep_value(self, value: object | None) -> dict | None:
+        """Convert frozen dataclass to stringified dict for serialization."""
+        if value is None:
+            return value
+        # use JSONField to convert dict to string
+        return super().get_prep_value(dataclasses.asdict(value))
+
+    def pre_save(self, model_instance: models.Model, add: bool) -> object:
+        """Convert Django model to a frozen dataclass before saving it."""
+        # I have been deep into the SQLUpdateCompiler to untangle what's going
+        # on and it appears that the model_instance passed in to this function
+        # is *not* the object being frozen, it's the parent / container. We need
+        # to ensure that the object being serialized is the field value. :shrug:
+        return freeze_object(
+            getattr(model_instance, self.attname),
+            include=self.include,
+            exclude=self.exclude,
+            select_related=self.select_related,
+        )

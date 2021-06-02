@@ -1,6 +1,6 @@
 from django.db import models
 
-from frozen_data.fields import FrozenDataField
+from frozen_data.fields import FrozenObjectField
 
 
 class FlatModel(models.Model):
@@ -8,15 +8,15 @@ class FlatModel(models.Model):
     field_str = models.TextField()
     field_bool = models.BooleanField()
     field_date = models.DateField()
-    field_decimal = models.DecimalField(decimal_places=3, max_digits=8)
     field_datetime = models.DateTimeField()
+    field_decimal = models.DecimalField(decimal_places=3, max_digits=8)
     field_float = models.FloatField()
     field_uuid = models.UUIDField()
     field_json = models.JSONField(null=True)
 
 
 class NestedModel(models.Model):
-    frozen = FrozenDataField(
+    frozen = FrozenObjectField(
         FlatModel,
         null=True,
         blank=True,
@@ -30,8 +30,9 @@ class NestedModel(models.Model):
 
 
 class DeepNestedModel(models.Model):
-    frozen = FrozenDataField(
+    frozen = FrozenObjectField(
         NestedModel,
+        include=["id", "frozen"],
         null=True,
         blank=True,
     )
