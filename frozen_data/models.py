@@ -125,19 +125,22 @@ def create_meta(
     if not isinstance(obj, models.Model):
         raise ValueError("'obj' must be a Django model")
 
-    def fq(field: Field) -> str:
-        return f"{field.__class__.__module__}.{field.__class__.__qualname__}"
+    if include and exclude:
+        raise ValueError("'include' and 'exclude' are mutually exclusive.")
 
-    def copy_attr_list(attr_list: AttributeList | None) -> AttributeList:
+    def _fqn(field: Field) -> str:
+        """Return fully-qualified (namespaced) name of a class."""
+        klass = field.__class__
+        return f"{klass.__module__}.{klass.__qualname__}"
+
+    def _copy(attr_list: AttributeList | None) -> AttributeList:
+        """Copy list - used to prevent edited mutable params."""
         if attr_list:
             return attr_list.copy()
         return []
 
-    _include = copy_attr_list(include) + copy_attr_list(select_related)
-    _exclude = copy_attr_list(exclude)
-
-    if _include and _exclude:
-        raise ValueError("'include' and 'exclude' are mutually exclusive.")
+    _include = _copy(include) + _copy(select_related)
+    _exclude = _copy(exclude)
 
     # the complete list of fields, included or not
     _all = obj._meta.local_fields
@@ -154,7 +157,7 @@ def create_meta(
 
     return FrozenObjectMeta(
         model=obj._meta.label,
-        fields={f.name: fq(f) for f in _all},
+        fields={f.name: _fqn(f) for f in _all},
         include=_include,
         exclude=_exclude,
         frozen_at=tz_now(),
