@@ -12,7 +12,38 @@ from .types import AttributeList, AttributeName, IsoTimestamp, ModelKlass, Model
 
 @dataclasses.dataclass
 class FrozenObjectMeta:
-    """Dataclass for frozen object metadata, extracted from model._meta."""
+    """
+    Dataclass for frozen object metadata, extracted from model._meta.
+
+    This dataclass lies at the heart of the freezing process. By capturing the
+    structure of a model (type, fields) it controls how the fields on a model
+    object are serialized, and in reverse how JSON is deserialized (by
+    determining the destination field of each serialized JSON value.)
+
+    As an example, a Decimal field on a model would be serialized (using the
+    DjanoJSONSerializer) as a string: `"cost": "1.49"`. When it comes to
+    deserializing this value we need to know that it is a Decimal and not a
+    string, which is where this meta model comes in. It serializes the structure
+    of the model:
+
+        {
+            "model": "core.Address",
+            "fields": {
+                "cost": "django.db.models.fields.DecimalField"
+            }
+        }
+
+    When the JSON is deserialized, we can look up the type of the field, and use
+    that to convert the value back to a Decimal. In essence it does this:
+
+        >>> cost = DecimalField.to_python("1.49")
+        >>> cost
+        Decimal('1.49')
+
+    Building on this, this field information is used to create a dynamic dataclass
+    that represents the model at the point of freezing.
+
+    """
 
     model: ModelName
     fields: dict[AttributeName, ModelKlass]
