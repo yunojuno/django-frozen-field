@@ -1,14 +1,11 @@
 import dataclasses
 import json
-import uuid
-from decimal import Decimal
 
 import pytest
 from django.core.serializers.json import DjangoJSONEncoder
-from django.utils.timezone import now as tz_now
 
 from frozen_data.models import create_meta, freeze_object, unfreeze_object
-from tests.models import FlatModel, NestedModel
+from tests.models import NestedModel
 from tests.test_fields import _flat
 
 TEST_DATA = {
@@ -90,48 +87,41 @@ class TestFrozenObjectMeta:
             ),
         ],
     )
-    def test_create_meta(self, include, exclude, include_out, exclude_out):
-        flat = FlatModel.objects.create(
-            field_int=999,
-            field_str="This is some text",
-            field_bool=True,
-            field_date=tz_now().date(),
-            field_datetime=tz_now(),
-            field_decimal=Decimal("3.142"),
-            field_float=float(1),
-            field_uuid=uuid.uuid4(),
-            field_json={"foo": "bar"},
-        )
+    def test_create_meta(self, flat, include, exclude, include_out, exclude_out):
         meta = create_meta(flat, include=include, exclude=exclude)
         assert meta.include == include_out
         assert meta.exclude == exclude_out
 
+    def test_extract_model_values__error(self, flat):
+        nested = NestedModel()
+        meta = create_meta(flat)
+        with pytest.raises(ValueError):
+            _ = meta.extract_model_values(nested)
+
 
 @pytest.mark.django_db
-def test_create_frozen_object():
-    flat_obj = _flat()
-    frozen_obj = freeze_object(flat_obj)
+def test_create_frozen_object(flat):
+    # flat = _flat()
+    frozen_obj = freeze_object(flat)
     for f in frozen_obj.meta.include:
-        assert getattr(flat_obj, f) == getattr(frozen_obj, f)
+        assert getattr(flat, f) == getattr(frozen_obj, f)
     for f in frozen_obj.meta.include:
         with pytest.raises(dataclasses.FrozenInstanceError):
-            setattr(frozen_obj, f, getattr(flat_obj, f))
+            setattr(frozen_obj, f, getattr(flat, f))
 
 
 @pytest.mark.django_db
-def test_dump_frozen_object():
-    flat_obj = _flat()
-    flat_obj.refresh_from_db()
-    nested_obj = NestedModel(fresh=flat_obj, frozen=flat_obj)
+def test_dump_frozen_object(flat):
+    flat.refresh_from_db()
+    nested_obj = NestedModel(fresh=flat, frozen=flat)
     nested_obj.save()
     frozen_obj = freeze_object(nested_obj, include=["frozen", "fresh"])
     as_dict = dataclasses.asdict(frozen_obj)
 
 
 @pytest.mark.django_db
-def test_load_frozen_object():
-    flat_obj = _flat()
-    nested_obj = NestedModel(fresh=flat_obj, frozen=flat_obj)
+def test_load_frozen_object(flat):
+    nested_obj = NestedModel(fresh=flat, frozen=flat)
     nested_obj.save()
     frozen_obj = freeze_object(nested_obj, include=["frozen", "fresh"])
     as_dict = dataclasses.asdict(frozen_obj)
