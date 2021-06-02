@@ -32,7 +32,7 @@ class NestedModel(models.Model):
 class DeepNestedModel(models.Model):
     frozen = FrozenObjectField(
         NestedModel,
-        include=["frozen"],
+        include=["id", "frozen"],
         null=True,
         blank=True,
     )
