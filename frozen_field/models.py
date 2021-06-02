@@ -96,12 +96,12 @@ class FrozenObjectMeta:
         return field.to_python(value)
 
 
-def create_meta(
+def create_meta(  # noqa: C901
     obj: models.Model,
     include: AttributeList | None = None,
     exclude: AttributeList | None = None,
     select_related: AttributeList | None = None,
-) -> FrozenObjectMeta:
+) -> FrozenObjectMeta | None:
     """
     Create a new meta object from a model instance.
 
@@ -122,6 +122,9 @@ def create_meta(
     contain all of the local_fields.
 
     """
+    if obj is None:
+        return obj
+
     if not isinstance(obj, models.Model):
         raise ValueError("'obj' must be a Django model")
 
@@ -169,14 +172,20 @@ def freeze_object(
     include: AttributeList | None = None,
     exclude: AttributeList | None = None,
     select_related: AttributeList | None = None,
-) -> object:
+) -> object | None:
     """Create dynamic dataclass mapping object properties."""
-    meta = create_meta(
-        obj,
-        include=include,
-        exclude=exclude,
-        select_related=select_related,
-    )
+    if obj is None:
+        return obj
+
+    if (
+        meta := create_meta(
+            obj,
+            include=include,
+            exclude=exclude,
+            select_related=select_related,
+        )
+    ) is None:
+        return None
     values = meta.extract_model_values(obj)
     return meta.create_frozen_object(**values)
 

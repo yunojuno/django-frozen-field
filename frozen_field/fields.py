@@ -35,6 +35,9 @@ class FrozenObjectField(models.JSONField):
     def deconstruct(self) -> tuple[str, str, list, dict]:
         name, path, args, kwargs = super().deconstruct()
         del kwargs["encoder"]
+        kwargs["include"] = self.include
+        kwargs["exclude"] = self.exclude
+        kwargs["select_related"] = self.select_related
         args = ["app_model"]
         return name, path, args, kwargs
 
@@ -45,8 +48,9 @@ class FrozenObjectField(models.JSONField):
         if value is None:
             return value
         # use JSONField to convert from string to a dict
-        value = super().from_db_value(value, expression, connection)
-        return unfreeze_object(value)  # type: ignore [arg-type]
+        if (obj := super().from_db_value(value, expression, connection)) is None:
+            return obj
+        return unfreeze_object(obj)
 
     def get_prep_value(self, value: object | None) -> dict | None:
         """Convert frozen dataclass to stringified dict for serialization."""
@@ -61,8 +65,12 @@ class FrozenObjectField(models.JSONField):
         # on and it appears that the model_instance passed in to this function
         # is *not* the object being frozen, it's the parent / container. We need
         # to ensure that the object being serialized is the field value. :shrug:
+        if model_instance is None:
+            return None
+        if (obj := getattr(model_instance, self.attname)) is None:
+            return obj
         return freeze_object(
-            getattr(model_instance, self.attname),
+            obj,
             include=self.include,
             exclude=self.exclude,
             select_related=self.select_related,
