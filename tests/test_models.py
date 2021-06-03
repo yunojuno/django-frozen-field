@@ -17,25 +17,18 @@ TEST_DATA = {
             "id": "django.db.models.IntegerField",
             "line_1": "django.db.models.CharField",
             "line_2": "django.db.models.CharField",
-            "postal_code": "django.db.models.CharField",
-            "country": "django.db.models.CharField",
         },
-        "exclude": ["country"],
-        "include": [],
-        "select_related": [],
-        "select_properties": [],
     },
     "id": 1,
     "line_1": "29 Acacia Avenue",
     "line_2": "Nuttytown",
-    "postal_code": "NT1",
 }
 
 
 @pytest.mark.django_db
 class TestFrozenObjectMeta:
     @pytest.mark.parametrize(
-        "include,exclude,include_out,exclude_out",
+        "include,exclude,frozen_attrs",
         [
             (
                 [],
@@ -52,23 +45,11 @@ class TestFrozenObjectMeta:
                     "field_uuid",
                     "field_json",
                 ],
-                [],
             ),
             (
                 ["field_int"],
                 [],
                 ["field_int"],
-                [
-                    "id",
-                    "field_str",
-                    "field_bool",
-                    "field_date",
-                    "field_datetime",
-                    "field_decimal",
-                    "field_float",
-                    "field_uuid",
-                    "field_json",
-                ],
             ),
             (
                 [],
@@ -84,14 +65,12 @@ class TestFrozenObjectMeta:
                     "field_uuid",
                     "field_json",
                 ],
-                ["field_int"],
             ),
         ],
     )
-    def test_create_meta(self, flat, include, exclude, include_out, exclude_out):
+    def test_create_meta(self, flat, include, exclude, frozen_attrs):
         meta = create_meta(flat, include=include, exclude=exclude)
-        assert meta.include == include_out
-        assert meta.exclude == exclude_out
+        assert meta.frozen_attrs == frozen_attrs
 
     def test_extract_model_values__error(self, flat):
         nested = NestedModel()
@@ -104,9 +83,9 @@ class TestFrozenObjectMeta:
 def test_create_frozen_object(flat):
     # flat = _flat()
     frozen_obj = freeze_object(flat)
-    for f in frozen_obj.meta.include:
+    for f in frozen_obj.meta.frozen_attrs:
         assert getattr(flat, f) == getattr(frozen_obj, f)
-    for f in frozen_obj.meta.include:
+    for f in frozen_obj.meta.frozen_attrs:
         with pytest.raises(dataclasses.FrozenInstanceError):
             setattr(frozen_obj, f, getattr(flat, f))
 

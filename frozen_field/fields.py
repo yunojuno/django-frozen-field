@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 
+from django.apps import apps
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from django.utils.translation import gettext_lazy as _lazy
@@ -18,27 +19,49 @@ class FrozenObjectField(models.JSONField):
 
     def __init__(
         self,
-        app_model: models.Model,
+        app_model: models.Model | str,
         include: AttributeList | None = None,
         exclude: AttributeList | None = None,
         select_related: AttributeList | None = None,
         **json_field_kwargs: object,
     ) -> None:
-        """Initialise FrozenObjectField."""
-        self.related_model = app_model
+        """
+        Initialise FrozenObjectField.
+
+        The app_model argument can be a Model itself, or the "app.Model" path to
+        a model (supported in case of circ. import issues).
+
+        The include argument is a list of fields on the app_model used to
+        restrict which fields are serialized. The default (None) is to include
+        every non-related field on the model.
+
+        The exclude argument is a list of fields on the app_model to exclude from
+        serialization. It can only be used if include is None.
+
+        The select_related argument is a list of related fields (ForeignKey, OneToOne)
+        to include in the serialization. By default all related fields are ignored.
+        This list is appended to the include list when considering which fields to
+        serialize.
+
+        The remaining kwargs are passed directly to the JSONField.
+
+        """
+        if isinstance(app_model, str):
+            self.related_model = apps.get_model(*app_model.split("."))
+        else:
+            self.related_model = app_model
         self.include = include or []
         self.exclude = exclude or []
         self.select_related = select_related or []
-        json_field_kwargs["encoder"] = DjangoJSONEncoder
+        json_field_kwargs.setdefault("encoder", DjangoJSONEncoder)
         super().__init__(**json_field_kwargs)
 
     def deconstruct(self) -> tuple[str, str, list, dict]:
         name, path, args, kwargs = super().deconstruct()
-        del kwargs["encoder"]
         kwargs["include"] = self.include
         kwargs["exclude"] = self.exclude
         kwargs["select_related"] = self.select_related
-        args = ["app_model"]
+        args = [self.related_model]
         return name, path, args, kwargs
 
     def from_db_value(

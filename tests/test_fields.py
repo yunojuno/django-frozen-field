@@ -51,7 +51,6 @@ class TestFrozenObjectField:
         for f in FlatModel._meta.local_fields:
             if f.name == "field_datetime":
                 continue
-            # print(f"Checking {f}")
             assert getattr(nested.frozen, f.name) == getattr(nested.fresh, f.name)
 
     def test_nested(self, nested):

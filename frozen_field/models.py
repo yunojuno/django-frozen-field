@@ -48,8 +48,6 @@ class FrozenObjectMeta:
 
     model: ModelName
     fields: dict[AttributeName, ModelKlass]
-    include: list[AttributeName]
-    exclude: list[AttributeName]
     frozen_at: IsoTimestamp
 
     @property
@@ -57,11 +55,16 @@ class FrozenObjectMeta:
         """Return a new class name for dataclass created from this meta object."""
         return f"Frozen{self.model.split('.')[-1]}"
 
+    @property
+    def frozen_attrs(self) -> AttributeList:
+        """Return list of frozen attr names - taken from fields dict."""
+        return list(self.fields.keys())
+
     def make_dataclass(self) -> type:
         """Create dynamic dataclass from the meta info."""
         klass = dataclasses.make_dataclass(
             cls_name=self.cls_name,
-            fields=["meta"] + self.include,
+            fields=["meta"] + self.frozen_attrs,
             frozen=True,
             namespace={
                 # used to support pickling - see _reduce docstring
@@ -84,7 +87,7 @@ class FrozenObjectMeta:
                 f"Incorrect object type; expected {self.model}, got {obj._meta.label}."
             )
         values: dict[str, object] = {}
-        for f in self.include:
+        for f in self.frozen_attrs:
             val = getattr(obj, f)
             if isinstance(val, models.Model):
                 frozen_obj = freeze_object(val)
@@ -105,7 +108,29 @@ class FrozenObjectMeta:
         return field.to_python(value)
 
 
-def create_meta(  # noqa: C901
+def _gather_fields(
+    obj: models.Model,
+    include: AttributeList | None,
+    exclude: AttributeList | None,
+    select_related: AttributeList | None,
+) -> list[Field]:
+    """Return subset of obj fields that will be serialized."""
+    local_fields = [f for f in obj._meta.local_fields if not f.related_model]
+    related_fields = [f for f in obj._meta.local_fields if f.related_model]
+
+    if include:
+        local_fields = [f for f in local_fields if f.name in include]
+
+    if exclude:
+        local_fields = [f for f in local_fields if f.name not in exclude]
+
+    if select_related:
+        related_fields = [f for f in related_fields if f.name in select_related]
+
+    return local_fields + related_fields
+
+
+def create_meta(
     obj: models.Model,
     include: AttributeList | None = None,
     exclude: AttributeList | None = None,
@@ -145,33 +170,11 @@ def create_meta(  # noqa: C901
         klass = field.__class__
         return f"{klass.__module__}.{klass.__qualname__}"
 
-    def _copy(attr_list: AttributeList | None) -> AttributeList:
-        """Copy list - used to prevent edited mutable params."""
-        if attr_list:
-            return attr_list.copy()
-        return []
-
-    _include = _copy(include) + _copy(select_related)
-    _exclude = _copy(exclude)
-
-    # the complete list of fields, included or not
-    _all = obj._meta.local_fields
-
-    # include all fields that are neither related nor in exclude
-    if not _include:
-        _include = [
-            f.name for f in _all if f.name not in _exclude and not f.related_model
-        ]
-
-    # exclude all related fields and those not in _include
-    if not _exclude:
-        _exclude = [f.name for f in _all if f.name not in _include]
+    fields = _gather_fields(obj, include, exclude, select_related)
 
     return FrozenObjectMeta(
         model=obj._meta.label,
-        fields={f.name: _fqn(f) for f in _all},
-        include=_include,
-        exclude=_exclude,
+        fields={f.name: _fqn(f) for f in fields},
         frozen_at=tz_now(),
     )
 
