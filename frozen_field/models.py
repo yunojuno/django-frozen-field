@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 from importlib import import_module
+from typing import Callable
 
 from django.db import models
 from django.db.models.fields import Field
@@ -58,11 +59,19 @@ class FrozenObjectMeta:
 
     def make_dataclass(self) -> type:
         """Create dynamic dataclass from the meta info."""
-        return dataclasses.make_dataclass(
+        klass = dataclasses.make_dataclass(
             cls_name=self.cls_name,
             fields=["meta"] + self.include,
             frozen=True,
+            namespace={
+                # used to support pickling - see _reduce docstring
+                "__reduce__": _reduce,
+                # consider two objs equal if all properties match
+                "__eq__": lambda obj1, obj2: vars(obj1) == vars(obj2),
+            },
         )
+        klass.__module__ = __name__
+        return klass
 
     def create_frozen_object(self, **values: object) -> object:
         """Create dynamic dataclass instance from the meta info and values."""
@@ -208,3 +217,36 @@ def unfreeze_object(frozen_object: dict) -> object:
         else:
             values[k] = meta._cast(k, v)
     return meta.create_frozen_object(**values)
+
+
+def _reduce(obj: object) -> tuple[Callable, tuple[dict]]:
+    """
+    Return a tuple for use as the dataclass __reduce__ method.
+
+    Dynamically-created dataclass don't pickle well as pickle can't find
+    the class in the module (as it doesn't exist). To get around this we
+    need to provide the dataclass with a `__reduce__` method that pickle
+    can use.
+
+    See https://docs.python.org/3/library/pickle.html#object.__reduce__
+
+    Because the model doesn't exist we take the second option in the article
+    above:
+
+        > When a tuple is returned, it must be between two and six items long.
+        > Optional items can either be omitted, or None can be provided as their
+        > value. The semantics of each item are in order:
+        >
+        > A callable object that will be called to create the initial version of
+        > the object.
+        >
+        > A tuple of arguments for the callable object. An empty tuple must be
+        > given if the callable does not accept any argument.
+
+    The return value is a 2-tuple that contains a function used to reproduce the
+    object, and a 1-tuple containing the argument to be passed to the function,
+    which in this case is the dict representation of the dataclass.
+
+    """
+    data = dataclasses.asdict(obj)
+    return (unfreeze_object, (data,))

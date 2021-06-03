@@ -1,12 +1,13 @@
 import dataclasses
 import json
+import pickle
 
 import pytest
 from django.core.serializers.json import DjangoJSONEncoder
 
 from frozen_field.models import create_meta, freeze_object, unfreeze_object
 from tests.models import NestedModel
-from tests.test_fields import _flat
+from tests.test_fields import _flat, nested
 
 TEST_DATA = {
     "meta": {
@@ -127,3 +128,11 @@ def test_load_frozen_object(flat):
     as_dict = dataclasses.asdict(frozen_obj)
     raw = json.dumps(as_dict, cls=DjangoJSONEncoder)
     refreshed = unfreeze_object(as_dict)
+
+
+@pytest.mark.django_db
+def test_pickle_frozen_object(flat):
+    frozen = freeze_object(flat)
+    p = pickle.dumps(frozen)
+    q = pickle.loads(p)
+    assert q == frozen
