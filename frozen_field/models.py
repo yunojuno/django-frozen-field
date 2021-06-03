@@ -71,6 +71,9 @@ class FrozenObjectMeta:
                 "__reduce__": _reduce,
                 # consider two objs equal if all properties match
                 "__eq__": lambda obj1, obj2: vars(obj1) == vars(obj2),
+                "data": lambda obj: {
+                    k: v for k, v in dataclasses.asdict(obj).items() if k != "meta"
+                },
             },
         )
         klass.__module__ = __name__
