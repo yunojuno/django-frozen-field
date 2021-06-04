@@ -31,7 +31,7 @@ class NestedModel(models.Model):
 
 class DeepNestedModel(models.Model):
     frozen = FrozenObjectField(
-        NestedModel,
+        "tests.NestedModel",
         include=["id", "frozen"],
         null=True,
         blank=True,

@@ -136,6 +136,8 @@ def _gather_fields(
 
     if select_related:
         related_fields = [f for f in related_fields if f.name in select_related]
+    else:
+        select_related = []
 
     return local_fields + related_fields
 

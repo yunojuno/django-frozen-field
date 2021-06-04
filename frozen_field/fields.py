@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 
 from django.apps import apps
+from django.core.exceptions import ValidationError
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from django.utils.translation import gettext_lazy as _lazy
@@ -19,7 +20,7 @@ class FrozenObjectField(models.JSONField):
 
     def __init__(
         self,
-        app_model: models.Model | str,
+        source_model: models.Model | str,
         include: AttributeList | None = None,
         exclude: AttributeList | None = None,
         select_related: AttributeList | None = None,
@@ -28,7 +29,7 @@ class FrozenObjectField(models.JSONField):
         """
         Initialise FrozenObjectField.
 
-        The app_model argument can be a Model itself, or the "app.Model" path to
+        The source_model argument can be a Model itself, or the "app.Model" path to
         a model (supported in case of circ. import issues).
 
         The include argument is a list of fields on the app_model used to
@@ -46,22 +47,40 @@ class FrozenObjectField(models.JSONField):
         The remaining kwargs are passed directly to the JSONField.
 
         """
-        if isinstance(app_model, str):
-            self.related_model = apps.get_model(*app_model.split("."))
-        else:
-            self.related_model = app_model
+        self.source_model = source_model
         self.include = include or []
         self.exclude = exclude or []
         self.select_related = select_related or []
         json_field_kwargs.setdefault("encoder", DjangoJSONEncoder)
         super().__init__(**json_field_kwargs)
 
+    @property
+    def model_klass(self) -> type[models.Model]:
+        """Return self.source_model as a Model type - it may have been set as a str."""
+        if not self.source_model:
+            raise ValueError("FrozenObjectField model is undefined")
+        if isinstance(self.source_model, str):
+            return apps.get_model(*self.source_model.split("."))
+        if issubclass(self.source_model, models.Model):
+            return self.source_model
+        raise ValueError(
+            f"Invalid FrozenObjectField model [{self.source_model}] - "
+            "must be a str or Model"
+        )
+
+    def validate_model(self, obj: models.Model) -> None:
+        """Validate that model instance is the correct / expected type."""
+        if not isinstance(obj, self.model_klass):
+            raise ValidationError(
+                f"Invalid model instance; expected '{self.source_model}', got '{obj}'."
+            )
+
     def deconstruct(self) -> tuple[str, str, list, dict]:
         name, path, args, kwargs = super().deconstruct()
         kwargs["include"] = self.include
         kwargs["exclude"] = self.exclude
         kwargs["select_related"] = self.select_related
-        args = [self.related_model]
+        args = [self.source_model]
         return name, path, args, kwargs
 
     def from_db_value(
@@ -92,6 +111,7 @@ class FrozenObjectField(models.JSONField):
             return None
         if (obj := getattr(model_instance, self.attname)) is None:
             return obj
+        self.validate_model(obj)
         return freeze_object(
             obj,
             include=self.include,
