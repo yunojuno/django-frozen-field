@@ -40,6 +40,7 @@ class DeepNestedModel(models.Model):
         "tests.NestedModel",
         encoder=CustomJSONEncoder,
         include=["id", "frozen"],
+        select_related=["fresh"],
         null=True,
         blank=True,
     )

@@ -44,8 +44,8 @@ class TestFrozenObjectField:
         deep_nested.refresh_from_db()
         assert is_dataclass_instance(deep_nested.frozen, "FrozenNestedModel")
         assert is_dataclass_instance(deep_nested.frozen.frozen, "FrozenFlatModel")
+        # "frozen.fresh" is included as it is defined in 'selected_related'.
+        assert is_dataclass_instance(deep_nested.frozen.fresh, "FrozenFlatModel")
         assert is_dataclass_instance(deep_nested.fresh.frozen, "FrozenFlatModel")
-        with pytest.raises(AttributeError):
-            assert deep_nested.frozen.fresh
         assert isinstance(deep_nested.fresh, NestedModel)
         assert isinstance(deep_nested.fresh.fresh, FlatModel)

@@ -69,8 +69,8 @@ class FrozenObjectMeta:
         return list(self.fields.keys())
 
     @classmethod
-    def is_meta(cls, value: object) -> bool:
-        """Return True if value looks like a meta dict."""
+    def has_meta(cls, value: object) -> bool:
+        """Return True if value looks like it contains a meta dict."""
         if not value:
             return False
 
@@ -127,14 +127,14 @@ class FrozenObjectMeta:
 
 
 def _gather_fields(
-    obj: models.Model,
+    klass: type[models.Model],
     include: AttributeList | None,
     exclude: AttributeList | None,
     select_related: AttributeList | None,
 ) -> list[Field]:
     """Return subset of obj fields that will be serialized."""
-    local_fields = [f for f in obj._meta.local_fields if not f.related_model]
-    related_fields = [f for f in obj._meta.local_fields if f.related_model]
+    local_fields = [f for f in klass._meta.local_fields if not f.related_model]
+    related_fields = [f for f in klass._meta.local_fields if f.related_model]
 
     if include:
         local_fields = [f for f in local_fields if f.name in include]
@@ -151,7 +151,7 @@ def _gather_fields(
 
 
 def create_meta(
-    obj: models.Model,
+    klass: type[models.Model],
     include: AttributeList | None = None,
     exclude: AttributeList | None = None,
     select_related: AttributeList | None = None,
@@ -176,19 +176,16 @@ def create_meta(
     contain all of the local_fields.
 
     """
-    if obj is None:
-        return obj
-
-    if not isinstance(obj, models.Model):
+    if not issubclass(klass, models.Model):
         raise ValueError("'obj' must be a Django model")
 
     if include and exclude:
         raise ValueError("'include' and 'exclude' are mutually exclusive.")
 
-    fields = _gather_fields(obj, include, exclude, select_related)
+    fields = _gather_fields(klass, include, exclude, select_related)
 
     return FrozenObjectMeta(
-        model=obj._meta.label,
+        model=klass._meta.label,
         fields={f.name: klass_str(f) for f in fields},
         frozen_at=tz_now(),
     )
@@ -214,7 +211,7 @@ def freeze_object(
 
     if (
         meta := create_meta(
-            obj,
+            obj.__class__,
             include=include,
             exclude=exclude,
             select_related=select_related,
@@ -237,7 +234,7 @@ def unfreeze_object(frozen_object: dict) -> FrozenModel:
     values: dict[str, object] = {}
     for k, v in frozen_object.items():
         # if we find another frozen object, recurse
-        if FrozenObjectMeta.is_meta(v):
+        if FrozenObjectMeta.has_meta(v):
             values[k] = unfreeze_object(v)
         else:
             values[k] = meta._cast(k, v)
