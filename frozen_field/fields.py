@@ -89,7 +89,7 @@ class FrozenObjectField(models.JSONField):
         return name, path, args, kwargs
 
     def from_db_value(
-        self, value: dict | None, expression: object, connection: object
+        self, value: str | None, expression: object, connection: object
     ) -> FrozenModel | None:
         """Deserialize db contents (json) back into original frozen dataclass."""
         if value is None:

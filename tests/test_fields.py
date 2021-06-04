@@ -46,7 +46,8 @@ class TestFrozenObjectField:
     def test_from_db_value(self, mock_unfreeze: mock.Mock, flat: FlatModel) -> None:
         field = FrozenObjectField(FlatModel)
         assert (
-            field.from_db_value({"meta": {}}, None, None) == mock_unfreeze.return_value
+            field.from_db_value('{"meta": {}}', None, None)
+            == mock_unfreeze.return_value
         )
 
     @pytest.mark.parametrize(
@@ -54,8 +55,8 @@ class TestFrozenObjectField:
         [
             (None, None),
             (
-                FrozenObjectMeta("tests.FlatModel", {}, TEST_NOW),
-                '{"model": "tests.FlatModel", "fields": {}, "frozen_at": null}',
+                FrozenObjectMeta("tests.FlatModel", {}, "2021-06-04T18:10:30.549Z"),
+                '{"model": "tests.FlatModel", "fields": {}, "frozen_at": "2021-06-04T18:10:30.549Z"}',
             ),
         ],
     )
@@ -74,7 +75,7 @@ class TestFrozenObjectField:
         ],
     )
     def test_from_db_value__empty(
-        self, value: Optional[dict], result: Optional[FrozenModel]
+        self, value: Optional[str], result: Optional[FrozenModel]
     ) -> None:
         field = FrozenObjectField(FlatModel)
         assert field.from_db_value(value, None, None) == result
