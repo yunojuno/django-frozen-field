@@ -31,24 +31,38 @@ from frozen_field.models import (
     freeze_object,
     unfreeze_object,
 )
-from frozen_field.types import AttributeList
+from frozen_field.types import AttributeList, is_dataclass_instance
 from tests.models import FlatModel, NestedModel
 
 TEST_NOW = tz_now()
 
 TEST_DATA = {
     "meta": {
-        "model": "Address",
-        "frozen_at": "2021-05-28T16:42:43.829687+00:00",
+        "model": "tests.FlatModel",
         "fields": {
-            "id": "django.db.models.IntegerField",
-            "line_1": "django.db.models.CharField",
-            "line_2": "django.db.models.CharField",
+            "id": "django.db.models.fields.AutoField",
+            "field_int": "django.db.models.fields.IntegerField",
+            "field_str": "django.db.models.fields.TextField",
+            "field_bool": "django.db.models.fields.BooleanField",
+            "field_date": "django.db.models.fields.DateField",
+            "field_datetime": "django.db.models.fields.DateTimeField",
+            "field_decimal": "django.db.models.fields.DecimalField",
+            "field_float": "django.db.models.fields.FloatField",
+            "field_uuid": "django.db.models.fields.UUIDField",
+            "field_json": "django.db.models.fields.json.JSONField",
         },
+        "frozen_at": "2021-06-04T18:10:30.549Z",
     },
     "id": 1,
-    "line_1": "29 Acacia Avenue",
-    "line_2": "Nuttytown",
+    "field_int": 999,
+    "field_str": "This is some text",
+    "field_bool": True,
+    "field_date": "2021-06-04",
+    "field_datetime": "2021-06-04T18:10:30.548Z",
+    "field_decimal": "3.142",
+    "field_float": 1,
+    "field_uuid": "6f09460c-c82b-4c8f-9d94-8828402da52e",
+    "field_json": {"foo": "bar"},
 }
 
 
@@ -101,6 +115,9 @@ class TestFrozenObjectMeta:
         obj1 = klass(meta, 999)
         assert obj1.data() == {"field_int": 999}
         assert obj1.__module__ == "frozen_field.models"
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            obj1.field_int = 0
+
         obj2 = klass(meta, 999)
         assert obj1 == obj2
         obj3 = klass(meta, 998)
@@ -285,33 +302,35 @@ class TestCreateMeta:
 
 
 @pytest.mark.django_db
-def test_create_frozen_object(flat: FlatModel) -> None:
-    frozen_obj = freeze_object(flat)
-    assert frozen_obj
-    for f in frozen_obj.meta.frozen_attrs:  # type:ignore [attr-defined]
-        assert getattr(flat, f) == getattr(frozen_obj, f)
-    for f in frozen_obj.meta.frozen_attrs:  # type:ignore [attr-defined]
-        with pytest.raises(dataclasses.FrozenInstanceError):
-            setattr(frozen_obj, f, getattr(flat, f))
+class TestFreezeObject:
+    """Group together tests for freeze / unfreeze functions."""
 
+    def test_freeze_object__none(self) -> None:
+        assert freeze_object(None) is None
 
-@pytest.mark.django_db
-def test_dump_frozen_object(flat: FlatModel) -> None:
-    flat.refresh_from_db()
-    nested_obj = NestedModel(fresh=flat, frozen=flat)
-    nested_obj.save()
-    frozen_obj = freeze_object(nested_obj, include=["frozen", "fresh"])
-    as_dict = dataclasses.asdict(frozen_obj)
+    def test_freeze_object(self, flat: FlatModel) -> None:
+        frozen_obj = freeze_object(flat)
+        assert frozen_obj is not None
+        assert is_dataclass_instance(frozen_obj, "FrozenFlatModel")
+        for f in frozen_obj.meta.frozen_attrs:  # type:ignore [attr-defined]
+            assert getattr(flat, f) == getattr(frozen_obj, f)
 
-
-@pytest.mark.django_db
-def test_load_frozen_object(flat: FlatModel) -> None:
-    nested_obj = NestedModel(fresh=flat, frozen=flat)
-    nested_obj.save()
-    frozen_obj = freeze_object(nested_obj, include=["frozen", "fresh"])
-    as_dict = dataclasses.asdict(frozen_obj)
-    raw = json.dumps(as_dict, cls=DjangoJSONEncoder)
-    refreshed = unfreeze_object(as_dict)
+    def test_unfreeze_object(self) -> None:
+        obj = unfreeze_object(TEST_DATA)
+        assert obj is not None
+        assert is_dataclass_instance(obj, "FrozenFlatModel")
+        assert obj.id == 1
+        assert obj.field_int == 999
+        assert obj.field_str == "This is some text"
+        assert obj.field_bool == True
+        assert obj.field_date == date(2021, 6, 4)
+        assert obj.field_datetime == datetime(
+            2021, 6, 4, 18, 10, 30, 548000, tzinfo=pytz.UTC
+        )
+        assert obj.field_decimal == Decimal("3.142")
+        assert obj.field_float == float(1)
+        assert obj.field_uuid == UUID("6f09460c-c82b-4c8f-9d94-8828402da52e")
+        assert obj.field_json == {"foo": "bar"}
 
 
 @pytest.mark.django_db

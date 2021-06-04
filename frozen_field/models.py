@@ -155,7 +155,7 @@ def create_meta(
     include: AttributeList | None = None,
     exclude: AttributeList | None = None,
     select_related: AttributeList | None = None,
-) -> FrozenObjectMeta | None:
+) -> FrozenObjectMeta:
     """
     Create a new meta object from a model instance.
 
@@ -209,15 +209,12 @@ def freeze_object(
     if obj is None:
         return obj
 
-    if (
-        meta := create_meta(
-            obj.__class__,
-            include=include,
-            exclude=exclude,
-            select_related=select_related,
-        )
-    ) is None:
-        return None
+    meta = create_meta(
+        obj.__class__,
+        include=include,
+        exclude=exclude,
+        select_related=select_related,
+    )
     dataklass = meta.make_dataclass()
     values = meta.parse_obj(obj)
     return dataklass(meta, **values)
@@ -225,11 +222,6 @@ def freeze_object(
 
 def unfreeze_object(frozen_object: dict) -> FrozenModel:
     """Deserialize a frozen object from stored JSON."""
-    if isinstance(frozen_object, str):  # type: ignore [unreachable]
-        # include this "unreachable" condition as str <> dict is a really
-        # common gotcha - json.dumps/loads confusion.
-        raise ValueError("'frozen_object' is a str - please use json.loads")
-
     meta = FrozenObjectMeta(**frozen_object.pop("meta"))
     values: dict[str, object] = {}
     for k, v in frozen_object.items():
