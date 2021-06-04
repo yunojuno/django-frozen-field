@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 import dataclasses
-import inspect
 
 from django.apps import apps
-from django.core.exceptions import ValidationError
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from django.utils.translation import gettext_lazy as _lazy
 
 from frozen_field.models import freeze_object, unfreeze_object
 
-from .types import AttributeList, DeconstructTuple, FrozenModel
+from .types import AttributeList, DeconstructTuple, FrozenModel, is_dataclass_instance
 
 
 class FrozenObjectField(models.JSONField):
@@ -21,7 +19,7 @@ class FrozenObjectField(models.JSONField):
 
     def __init__(
         self,
-        source_model: models.Model | str,
+        model: models.Model | str,
         include: AttributeList | None = None,
         exclude: AttributeList | None = None,
         select_related: AttributeList | None = None,
@@ -48,7 +46,16 @@ class FrozenObjectField(models.JSONField):
         The remaining kwargs are passed directly to the JSONField.
 
         """
-        self.source_model = source_model
+        if not model:
+            raise ValueError("Missing model argument.")
+        if isinstance(model, type(models.Model)):
+            self.model_label = model._meta.label
+            self.model_name = model._meta.label.rsplit(".", 1)[-1]
+        elif isinstance(model, str):
+            self.model_label = model
+            self.model_name = model.rsplit(".", 1)[-1]
+        else:
+            raise ValueError("Invalid model argument - must be a str or Model.")
         self.include = include or []
         self.exclude = exclude or []
         self.select_related = select_related or []
@@ -56,27 +63,13 @@ class FrozenObjectField(models.JSONField):
         super().__init__(**json_field_kwargs)
 
     @property
-    def _source_model_klass(self) -> type[models.Model]:
-        """Return self.source_model as a Model type - it may have been set as a str."""
-        if not self.source_model:
-            raise ValueError("FrozenObjectField model is undefined")
-        if isinstance(self.source_model, str):
-            return apps.get_model(*self.source_model.split("."))
-        if inspect.isclass(self.source_model) and issubclass(
-            self.source_model, models.Model
-        ):
-            return self.source_model
-        raise ValueError(
-            f"Invalid FrozenObjectField model [{self.source_model}] - "
-            "must be a str or Model."
-        )
+    def frozen_model_name(self) -> str:
+        return f"Frozen{self.model_name}"
 
-    def validate_model(self, obj: models.Model) -> None:
-        """Validate that model instance is the correct / expected type."""
-        if not isinstance(obj, self._source_model_klass):
-            raise ValidationError(
-                f"Invalid model instance; expected '{self.source_model}', got '{obj}'."
-            )
+    @property
+    def model_klass(self) -> type[models.Model]:
+        """Return Model type - it may have been set as a str."""
+        return apps.get_model(*self.model_label.split("."))
 
     def deconstruct(self) -> DeconstructTuple:
         name, path, args, kwargs = super().deconstruct()
@@ -85,7 +78,7 @@ class FrozenObjectField(models.JSONField):
         kwargs["include"] = self.include
         kwargs["exclude"] = self.exclude
         kwargs["select_related"] = self.select_related
-        args = [self.source_model]
+        args = [self.model_label]
         return name, path, args, kwargs
 
     def from_db_value(
@@ -107,17 +100,26 @@ class FrozenObjectField(models.JSONField):
         return super().get_prep_value(dataclasses.asdict(value))
 
     def pre_save(self, model_instance: models.Model, add: bool) -> FrozenModel | None:
-        """Convert Django model to a frozen dataclass before saving it."""
-        # I have been deep into the SQLUpdateCompiler to untangle what's going
-        # on and it appears that the model_instance passed in to this function
-        # is *not* the object being frozen, it's the parent / container. We need
-        # to ensure that the object being serialized is the field value. :shrug:
+        """
+        Convert Django model to a frozen dataclass before saving it.
+
+        The model_instance argument is the model to which we have attached the field,
+        and so before saving we need to extract the value of the field itself using
+        the `attname` property.
+
+        If the value of the field is a model of the expected type, we freeze it. If it
+        is already frozen, we just pass it back again.
+
+        """
         if (obj := getattr(model_instance, self.attname)) is None:
             return obj
-        self.validate_model(obj)
-        return freeze_object(
-            obj,
-            include=self.include,
-            exclude=self.exclude,
-            select_related=self.select_related,
-        )
+        if is_dataclass_instance(obj, f"{self.frozen_model_name}"):
+            return obj
+        if isinstance(obj, self.model_klass):
+            return freeze_object(
+                obj,
+                include=self.include,
+                exclude=self.exclude,
+                select_related=self.select_related,
+            )
+        raise ValueError(f"model_instance '{self.attname}' value is invalid.")

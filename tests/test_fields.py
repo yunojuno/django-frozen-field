@@ -15,32 +15,25 @@ from .models import DeepNestedModel, FlatModel, NestedModel
 
 @pytest.mark.django_db
 class TestFrozenObjectField:
-    @pytest.mark.parametrize("source_model", ["tests.FlatModel", FlatModel])
-    def test_initialisation(self, source_model: Union[str, Model]) -> None:
-        field = FrozenObjectField(source_model)
-        assert field.source_model == source_model
+    @pytest.mark.parametrize("model", ["tests.FlatModel", FlatModel])
+    def test_initialisation(self, model: Union[str, Model]) -> None:
+        field = FrozenObjectField(model)
+        assert field.model_klass == FlatModel
+        assert field.model_name == "FlatModel"
+        assert field.model_label == "tests.FlatModel"
         assert field.include == []
         assert field.exclude == []
         assert field.select_related == []
 
-    @pytest.mark.parametrize("source_model", ["tests.FlatModel", FlatModel])
-    def test__source_model_klass(self, source_model: Union[str, Model]) -> None:
-        field = FrozenObjectField(source_model)
-        assert field._source_model_klass == FlatModel
-
-    @pytest.mark.parametrize("source_model", [None, 1, True])
-    def test__source_model_klass__value_error(
-        self, source_model: Union[str, Model]
-    ) -> None:
-        field = FrozenObjectField(source_model)
+    @pytest.mark.parametrize("model", [None, 1, True])
+    def test_initialisation__value_error(self, model: Union[str, Model]) -> None:
         with pytest.raises(ValueError):
-            _ = field._source_model_klass
+            _ = FrozenObjectField(model)
 
-    def test_validate_model(self) -> None:
-        field = FrozenObjectField(FlatModel)
-        obj = NestedModel()
-        with pytest.raises(ValidationError):
-            field.validate_model(obj)
+    @pytest.mark.parametrize("model", ["tests.FlatModel", FlatModel])
+    def test_model_klass(self, model: Union[str, Model]) -> None:
+        field = FrozenObjectField(model)
+        assert field.model_klass == FlatModel
 
     @mock.patch("frozen_field.fields.unfreeze_object")
     def test_from_db_value(self, mock_unfreeze: mock.Mock, flat: FlatModel) -> None:
