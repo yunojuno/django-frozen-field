@@ -1,33 +1,95 @@
-import datetime
+from typing import Optional, Union
+from unittest import mock
 
 import pytest
-from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models.fields import DateTimeField
+from django.core.exceptions import ValidationError
+from django.db.models.base import Model
 
-from frozen_field.types import is_dataclass_instance
+from frozen_field.fields import FrozenObjectField
+from frozen_field.models import FrozenObjectMeta
+from frozen_field.types import FrozenModel, is_dataclass_instance
+from tests.test_models import TEST_NOW
 
 from .models import DeepNestedModel, FlatModel, NestedModel
 
 
-def truncate_datetime(dt: datetime.datetime) -> datetime.datetime:
-    """Truncate microseconds to milliseconds."""
-    encoder = DjangoJSONEncoder()
-    field = DateTimeField()
-    return field.to_python(encoder.default(dt))
+@pytest.mark.django_db
+class TestFrozenObjectField:
+    @pytest.mark.parametrize("source_model", ["tests.FlatModel", FlatModel])
+    def test_initialisation(self, source_model: Union[str, Model]) -> None:
+        field = FrozenObjectField(source_model)
+        assert field.source_model == source_model
+        assert field.include == []
+        assert field.exclude == []
+        assert field.select_related == []
+
+    @pytest.mark.parametrize("source_model", ["tests.FlatModel", FlatModel])
+    def test__source_model_klass(self, source_model: Union[str, Model]) -> None:
+        field = FrozenObjectField(source_model)
+        assert field._source_model_klass == FlatModel
+
+    @pytest.mark.parametrize("source_model", [None, 1, True])
+    def test__source_model_klass__value_error(
+        self, source_model: Union[str, Model]
+    ) -> None:
+        field = FrozenObjectField(source_model)
+        with pytest.raises(ValueError):
+            _ = field._source_model_klass
+
+    def test_validate_model(self) -> None:
+        field = FrozenObjectField(FlatModel)
+        obj = NestedModel()
+        with pytest.raises(ValidationError):
+            field.validate_model(obj)
+
+    @mock.patch("frozen_field.fields.unfreeze_object")
+    def test_from_db_value(self, mock_unfreeze: mock.Mock, flat: FlatModel) -> None:
+        field = FrozenObjectField(FlatModel)
+        assert (
+            field.from_db_value({"meta": {}}, None, None) == mock_unfreeze.return_value
+        )
+
+    @pytest.mark.parametrize(
+        "value,result",
+        [
+            (None, None),
+            (
+                FrozenObjectMeta("tests.FlatModel", {}, TEST_NOW),
+                '{"model": "tests.FlatModel", "fields": {}, "frozen_at": null}',
+            ),
+        ],
+    )
+    def test_get_prep_value(
+        self, value: Optional[FrozenModel], result: Optional[dict]
+    ) -> None:
+        field = FrozenObjectField(FlatModel)
+        assert field.get_prep_value(value) == result
+
+    @pytest.mark.parametrize(
+        "value,result",
+        [
+            (None, None),
+            ("", None),
+            ("{}", None),
+        ],
+    )
+    def test_from_db_value__empty(
+        self, value: Optional[dict], result: Optional[FrozenModel]
+    ) -> None:
+        field = FrozenObjectField(FlatModel)
+        assert field.from_db_value(value, None, None) == result
 
 
 @pytest.mark.django_db
-class TestFrozenObjectField:
+class TestSerialization:
+    """Group together serialization functions."""
+
     def test_serialization(self, flat: FlatModel) -> None:
-        nested = NestedModel.objects.create(frozen=flat, fresh=flat)
+        nested = NestedModel.objects.create(frozen=None, fresh=flat)
         nested.refresh_from_db()
-        for f in FlatModel._meta.local_fields:
-            fresh_value = getattr(nested.fresh, f.name)
-            frozen_value = getattr(nested.frozen, f.name)
-            # see notes in README on datetime truncation
-            if isinstance(f, DateTimeField):
-                fresh_value = truncate_datetime(fresh_value)
-            assert frozen_value == fresh_value
+        assert nested.frozen is None
+        nested.frozen = nested.fresh
+        nested.save()
 
     def test_deserialization(self, nested: NestedModel) -> None:
         # object has been saved, but not refreshed - so still a Model

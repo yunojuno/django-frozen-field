@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import inspect
 
 from django.apps import apps
 from django.core.exceptions import ValidationError
@@ -61,7 +62,9 @@ class FrozenObjectField(models.JSONField):
             raise ValueError("FrozenObjectField model is undefined")
         if isinstance(self.source_model, str):
             return apps.get_model(*self.source_model.split("."))
-        if issubclass(self.source_model, models.Model):
+        if inspect.isclass(self.source_model) and issubclass(
+            self.source_model, models.Model
+        ):
             return self.source_model
         raise ValueError(
             f"Invalid FrozenObjectField model [{self.source_model}] - "
@@ -87,14 +90,14 @@ class FrozenObjectField(models.JSONField):
 
     def from_db_value(
         self, value: dict | None, expression: object, connection: object
-    ) -> object | None:
+    ) -> FrozenModel | None:
         """Deserialize db contents (json) back into original frozen dataclass."""
         if value is None:
             return value
         # use JSONField to convert from string to a dict
-        if (obj := super().from_db_value(value, expression, connection)) is None:
-            return obj
-        return unfreeze_object(obj)
+        if obj := super().from_db_value(value, expression, connection):
+            return unfreeze_object(obj)
+        return None
 
     def get_prep_value(self, value: FrozenModel | None) -> dict | None:
         """Convert frozen dataclass to stringified dict for serialization."""
@@ -109,8 +112,6 @@ class FrozenObjectField(models.JSONField):
         # on and it appears that the model_instance passed in to this function
         # is *not* the object being frozen, it's the parent / container. We need
         # to ensure that the object being serialized is the field value. :shrug:
-        if model_instance is None:
-            return None
         if (obj := getattr(model_instance, self.attname)) is None:
             return obj
         self.validate_model(obj)
