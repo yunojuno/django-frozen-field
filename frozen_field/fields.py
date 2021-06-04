@@ -10,7 +10,7 @@ from django.utils.translation import gettext_lazy as _lazy
 
 from frozen_field.models import freeze_object, unfreeze_object
 
-from .types import AttributeList
+from .types import AttributeList, DeconstructTuple, FrozenModel
 
 
 class FrozenObjectField(models.JSONField):
@@ -75,7 +75,7 @@ class FrozenObjectField(models.JSONField):
                 f"Invalid model instance; expected '{self.source_model}', got '{obj}'."
             )
 
-    def deconstruct(self) -> tuple[str, str, list, dict]:
+    def deconstruct(self) -> DeconstructTuple:
         name, path, args, kwargs = super().deconstruct()
         if kwargs["encoder"] == DjangoJSONEncoder:
             del kwargs["encoder"]
@@ -86,7 +86,7 @@ class FrozenObjectField(models.JSONField):
         return name, path, args, kwargs
 
     def from_db_value(
-        self, value: object, expression: object, connection: object
+        self, value: dict | None, expression: object, connection: object
     ) -> object | None:
         """Deserialize db contents (json) back into original frozen dataclass."""
         if value is None:
@@ -96,14 +96,14 @@ class FrozenObjectField(models.JSONField):
             return obj
         return unfreeze_object(obj)
 
-    def get_prep_value(self, value: object | None) -> dict | None:
+    def get_prep_value(self, value: FrozenModel | None) -> dict | None:
         """Convert frozen dataclass to stringified dict for serialization."""
         if value is None:
             return value
         # use JSONField to convert dict to string
         return super().get_prep_value(dataclasses.asdict(value))
 
-    def pre_save(self, model_instance: models.Model, add: bool) -> object:
+    def pre_save(self, model_instance: models.Model, add: bool) -> FrozenModel | None:
         """Convert Django model to a frozen dataclass before saving it."""
         # I have been deep into the SQLUpdateCompiler to untangle what's going
         # on and it appears that the model_instance passed in to this function

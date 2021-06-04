@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import dataclasses
 from importlib import import_module
-from typing import Callable
 
 from django.db import models
 from django.db.models.fields import Field
@@ -11,9 +10,11 @@ from django.utils.timezone import now as tz_now
 from .types import (
     AttributeList,
     AttributeName,
+    FrozenModel,
     IsoTimestamp,
     ModelKlass,
     ModelName,
+    PickleReducer,
     klass_str,
 )
 
@@ -67,6 +68,17 @@ class FrozenObjectMeta:
         """Return list of frozen attr names - taken from fields dict."""
         return list(self.fields.keys())
 
+    @classmethod
+    def is_meta(cls, value: object) -> bool:
+        """Return True if value looks like a meta dict."""
+        if not value:
+            return False
+
+        if not isinstance(value, dict):
+            return False
+
+        return "meta" in value and "frozen_at" in value["meta"]
+
     def make_dataclass(self) -> type:
         """Create dynamic dataclass from the meta info."""
         klass = dataclasses.make_dataclass(
@@ -86,12 +98,8 @@ class FrozenObjectMeta:
         klass.__module__ = __name__
         return klass
 
-    def create_frozen_object(self, **values: object) -> object:
-        """Create dynamic dataclass instance from the meta info and values."""
-        return self.make_dataclass()(self, **values)
-
     def parse_obj(self, obj: models.Model) -> dict[str, object]:
-        """Extract {name: value} dict from a model instance using meta info."""
+        """Extract {attr: value} dict from a model instance using meta info."""
         if obj._meta.label != self.model:
             raise ValueError(
                 f"Incorrect object type; expected {self.model}, got {obj._meta.label}."
@@ -191,8 +199,16 @@ def freeze_object(
     include: AttributeList | None = None,
     exclude: AttributeList | None = None,
     select_related: AttributeList | None = None,
-) -> object | None:
-    """Create dynamic dataclass mapping object properties."""
+) -> FrozenModel | None:
+    """
+    Create a new dataclass containing meta info and object properties.
+
+    The process for freezing a Model instance is to first create the meta object
+    that defines which fields we want to freeze, using that to create a new dynamic
+    dataclass, and then creating an instance of the dataclass. It is this intermediate
+    object that is serialized.
+
+    """
     if obj is None:
         return obj
 
@@ -210,20 +226,18 @@ def freeze_object(
     return dataklass(meta, **values)
 
 
-def unfreeze_object(frozen_object: dict) -> object:
+def unfreeze_object(frozen_object: dict) -> FrozenModel:
     """Deserialize a frozen object from stored JSON."""
     if isinstance(frozen_object, str):  # type: ignore [unreachable]
         # include this "unreachable" condition as str <> dict is a really
         # common gotcha - json.dumps/loads confusion.
         raise ValueError("'frozen_object' is a str - please use json.loads")
 
-    meta = FrozenObjectMeta(**frozen_object["meta"])
+    meta = FrozenObjectMeta(**frozen_object.pop("meta"))
     values: dict[str, object] = {}
     for k, v in frozen_object.items():
-        if k == "meta":
-            continue
         # if we find another frozen object, recurse
-        elif isinstance(v, dict) and "meta" in v and "frozen_at" in v["meta"]:
+        if FrozenObjectMeta.is_meta(v):
             values[k] = unfreeze_object(v)
         else:
             values[k] = meta._cast(k, v)
@@ -231,7 +245,7 @@ def unfreeze_object(frozen_object: dict) -> object:
     return dataklass(meta, **values)
 
 
-def _reduce(obj: object) -> tuple[Callable, tuple[dict]]:
+def _reduce(obj: FrozenModel) -> PickleReducer:
     """
     Return a tuple for use as the dataclass __reduce__ method.
 
