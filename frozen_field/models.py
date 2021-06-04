@@ -8,7 +8,14 @@ from django.db import models
 from django.db.models.fields import Field
 from django.utils.timezone import now as tz_now
 
-from .types import AttributeList, AttributeName, IsoTimestamp, ModelKlass, ModelName
+from .types import (
+    AttributeList,
+    AttributeName,
+    IsoTimestamp,
+    ModelKlass,
+    ModelName,
+    klass_str,
+)
 
 
 @dataclasses.dataclass
@@ -129,8 +136,6 @@ def _gather_fields(
 
     if select_related:
         related_fields = [f for f in related_fields if f.name in select_related]
-    else:
-        related_fields = []
 
     return local_fields + related_fields
 
@@ -170,16 +175,11 @@ def create_meta(
     if include and exclude:
         raise ValueError("'include' and 'exclude' are mutually exclusive.")
 
-    def _fqn(field: Field) -> str:
-        """Return fully-qualified (namespaced) name of a class."""
-        klass = field.__class__
-        return f"{klass.__module__}.{klass.__qualname__}"
-
     fields = _gather_fields(obj, include, exclude, select_related)
 
     return FrozenObjectMeta(
         model=obj._meta.label,
-        fields={f.name: _fqn(f) for f in fields},
+        fields={f.name: klass_str(f) for f in fields},
         frozen_at=tz_now(),
     )
 
