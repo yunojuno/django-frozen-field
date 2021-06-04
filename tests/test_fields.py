@@ -1,72 +1,51 @@
-import dataclasses
-import uuid
-from dataclasses import dataclass
-from decimal import Decimal
+import datetime
 
 import pytest
-from django.utils.timezone import now as tz_now
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db.models.fields import DateTimeField
+
+from frozen_field.types import is_dataclass_instance
 
 from .models import DeepNestedModel, FlatModel, NestedModel
 
 
-def _flat() -> FlatModel:
-    return FlatModel.objects.create(
-        field_int=999,
-        field_str="This is some text",
-        field_bool=True,
-        field_date=tz_now().date(),
-        field_datetime=tz_now(),
-        field_decimal=Decimal("3.142"),
-        field_float=float(1),
-        field_uuid=uuid.uuid4(),
-        field_json={"foo": "bar"},
-    )
-
-
-def _nested(flat: FlatModel) -> NestedModel:
-    return NestedModel.objects.create(
-        frozen=flat,
-        fresh=flat,
-    )
-
-
-@pytest.fixture
-def flat():
-    return _flat()
-
-
-@pytest.fixture
-def nested(flat):
-    return _nested(flat)
+def truncate_datetime(dt: datetime.datetime) -> datetime.datetime:
+    """Truncate microseconds to milliseconds."""
+    encoder = DjangoJSONEncoder()
+    field = DateTimeField()
+    return field.to_python(encoder.default(dt))
 
 
 @pytest.mark.django_db
 class TestFrozenObjectField:
-    def test_save(self, flat):
-        flat.save()
-        nested = NestedModel(frozen=flat, fresh=flat)
-        assert nested.frozen.field_datetime == nested.frozen.field_datetime
-        nested.save()
+    def test_serialization(self, flat: FlatModel) -> None:
+        nested = NestedModel.objects.create(frozen=flat, fresh=flat)
         nested.refresh_from_db()
         for f in FlatModel._meta.local_fields:
-            if f.name == "field_datetime":
-                continue
-            assert getattr(nested.frozen, f.name) == getattr(nested.fresh, f.name)
+            fresh_value = getattr(nested.fresh, f.name)
+            frozen_value = getattr(nested.frozen, f.name)
+            # see notes in README on datetime truncation
+            if isinstance(f, DateTimeField):
+                fresh_value = truncate_datetime(fresh_value)
+            assert frozen_value == fresh_value
 
-    def test_nested(self, nested):
+    def test_deserialization(self, nested: NestedModel) -> None:
+        # object has been saved, but not refreshed - so still a Model
         assert isinstance(nested.fresh, FlatModel)
         assert isinstance(nested.frozen, FlatModel)
         nested.refresh_from_db()
         assert isinstance(nested.fresh, FlatModel)
-        assert dataclasses.is_dataclass(nested.frozen)
-        assert nested.frozen.__class__.__name__ == "FrozenFlatModel"
+        # frozen field has been serialized and is now a FrozenObject
+        assert is_dataclass_instance(nested.frozen, "FrozenFlatModel")
 
-    def test_deep_nested(self, nested):
+    def test_deep_nested(self, nested: NestedModel) -> None:
+        nested.refresh_from_db()
         deep_nested = DeepNestedModel.objects.create(fresh=nested, frozen=nested)
         deep_nested.refresh_from_db()
-        assert deep_nested.fresh.id == deep_nested.frozen.id
-        # print(deep_nested.frozen.meta)
-        # print(deep_nested.frozen)
-        # print(type(deep_nested.frozen.frozen))
-        # print(type(deep_nested.frozen))
-        assert deep_nested.fresh.fresh.id == deep_nested.frozen.frozen.id
+        assert is_dataclass_instance(deep_nested.frozen, "FrozenNestedModel")
+        assert is_dataclass_instance(deep_nested.frozen.frozen, "FrozenFlatModel")
+        assert is_dataclass_instance(deep_nested.fresh.frozen, "FrozenFlatModel")
+        with pytest.raises(AttributeError):
+            assert deep_nested.frozen.fresh
+        assert isinstance(deep_nested.fresh, NestedModel)
+        assert isinstance(deep_nested.fresh.fresh, FlatModel)

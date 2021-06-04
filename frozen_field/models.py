@@ -90,7 +90,7 @@ class FrozenObjectMeta:
         """Create dynamic dataclass instance from the meta info and values."""
         return self.make_dataclass()(self, **values)
 
-    def extract_model_values(self, obj: models.Model) -> dict[str, object]:
+    def parse_obj(self, obj: models.Model) -> dict[str, object]:
         """Extract {name: value} dict from a model instance using meta info."""
         if obj._meta.label != self.model:
             raise ValueError(
@@ -137,7 +137,7 @@ def _gather_fields(
     if select_related:
         related_fields = [f for f in related_fields if f.name in select_related]
     else:
-        select_related = []
+        related_fields = []
 
     return local_fields + related_fields
 
@@ -205,8 +205,9 @@ def freeze_object(
         )
     ) is None:
         return None
-    values = meta.extract_model_values(obj)
-    return meta.create_frozen_object(**values)
+    dataklass = meta.make_dataclass()
+    values = meta.parse_obj(obj)
+    return dataklass(meta, **values)
 
 
 def unfreeze_object(frozen_object: dict) -> object:
@@ -222,11 +223,12 @@ def unfreeze_object(frozen_object: dict) -> object:
         if k == "meta":
             continue
         # if we find another frozen object, recurse
-        elif isinstance(v, dict) and "meta" in v:
+        elif isinstance(v, dict) and "meta" in v and "frozen_at" in v["meta"]:
             values[k] = unfreeze_object(v)
         else:
             values[k] = meta._cast(k, v)
-    return meta.create_frozen_object(**values)
+    dataklass = meta.make_dataclass()
+    return dataklass(meta, **values)
 
 
 def _reduce(obj: object) -> tuple[Callable, tuple[dict]]:

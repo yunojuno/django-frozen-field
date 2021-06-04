@@ -36,15 +36,15 @@ def _deep(nested: NestedModel) -> DeepNestedModel:
 
 
 @pytest.fixture
-def flat():
+def flat() -> FlatModel:
     return _flat()
 
 
 @pytest.fixture
-def nested(flat):
+def nested(flat: FlatModel) -> NestedModel:
     return _nested(flat)
 
 
 @pytest.fixture
-def deep(nested):
+def deep(nested: NestedModel) -> DeepNestedModel:
     return _deep(nested)

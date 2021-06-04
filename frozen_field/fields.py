@@ -55,7 +55,7 @@ class FrozenObjectField(models.JSONField):
         super().__init__(**json_field_kwargs)
 
     @property
-    def model_klass(self) -> type[models.Model]:
+    def _source_model_klass(self) -> type[models.Model]:
         """Return self.source_model as a Model type - it may have been set as a str."""
         if not self.source_model:
             raise ValueError("FrozenObjectField model is undefined")
@@ -65,18 +65,20 @@ class FrozenObjectField(models.JSONField):
             return self.source_model
         raise ValueError(
             f"Invalid FrozenObjectField model [{self.source_model}] - "
-            "must be a str or Model"
+            "must be a str or Model."
         )
 
     def validate_model(self, obj: models.Model) -> None:
         """Validate that model instance is the correct / expected type."""
-        if not isinstance(obj, self.model_klass):
+        if not isinstance(obj, self._source_model_klass):
             raise ValidationError(
                 f"Invalid model instance; expected '{self.source_model}', got '{obj}'."
             )
 
     def deconstruct(self) -> tuple[str, str, list, dict]:
         name, path, args, kwargs = super().deconstruct()
+        if kwargs["encoder"] == DjangoJSONEncoder:
+            del kwargs["encoder"]
         kwargs["include"] = self.include
         kwargs["exclude"] = self.exclude
         kwargs["select_related"] = self.select_related

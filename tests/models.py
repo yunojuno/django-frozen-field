@@ -1,9 +1,15 @@
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 
 from frozen_field.fields import FrozenObjectField
 
 
+class CustomJSONEncoder(DjangoJSONEncoder):
+    """Custom encoder used to test field deconstruct method."""
+
+
 class FlatModel(models.Model):
+
     field_int = models.IntegerField()
     field_str = models.TextField()
     field_bool = models.BooleanField()
@@ -32,6 +38,7 @@ class NestedModel(models.Model):
 class DeepNestedModel(models.Model):
     frozen = FrozenObjectField(
         "tests.NestedModel",
+        encoder=CustomJSONEncoder,
         include=["id", "frozen"],
         null=True,
         blank=True,
