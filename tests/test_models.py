@@ -1,23 +1,20 @@
 import dataclasses
-import json
 import pickle
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
 import freezegun
 import pytest
 import pytz
-from django.core.serializers.json import DjangoJSONEncoder
-from django.db import models
 from django.db.models.fields import (
     BooleanField,
     DateField,
     DateTimeField,
     DecimalField,
+    Field,
     FloatField,
     IntegerField,
-    SmallIntegerField,
     TextField,
     UUIDField,
 )
@@ -84,7 +81,7 @@ class TestFrozenObjectMeta:
             ({"foo": 1, "bar": False}, ["foo", "bar"]),
         ],
     )
-    def test_frozen_attrs(self, fields, frozen_attrs) -> None:
+    def test_frozen_attrs(self, fields: dict, frozen_attrs: AttributeList) -> None:
         meta = FrozenObjectMeta(
             model="tests.FlatModel",
             fields=fields,
@@ -164,11 +161,11 @@ class TestFrozenObjectMeta:
             ("django.db.models.fields.json.JSONField", JSONField),
         ],
     )
-    def test__field(self, field_path, field_klass) -> None:
+    def test__field(self, field_path: str, field_klass: Field) -> None:
         meta = FrozenObjectMeta(
             model="tests.FlatModel",
             fields={"test_field": field_path},
-            frozen_at=None,
+            frozen_at=TEST_NOW,
         )
         assert isinstance(meta._field("test_field"), field_klass)
 
@@ -205,11 +202,11 @@ class TestFrozenObjectMeta:
             ),
         ],
     )
-    def test__cast(self, field_path, input, output) -> None:
+    def test__cast(self, field_path: str, input: str, output: object) -> None:
         meta = FrozenObjectMeta(
             model="tests.FlatModel",
             fields={"test_field": field_path},
-            frozen_at=None,
+            frozen_at=TEST_NOW,
         )
         assert meta._cast("test_field", input) == output
 
@@ -319,18 +316,20 @@ class TestFreezeObject:
         obj = unfreeze_object(TEST_DATA)
         assert obj is not None
         assert is_dataclass_instance(obj, "FrozenFlatModel")
-        assert obj.id == 1
-        assert obj.field_int == 999
-        assert obj.field_str == "This is some text"
-        assert obj.field_bool == True
-        assert obj.field_date == date(2021, 6, 4)
-        assert obj.field_datetime == datetime(
+        assert obj.id == 1  # type:ignore [attr-defined]
+        assert obj.field_int == 999  # type:ignore [attr-defined]
+        assert obj.field_str == "This is some text"  # type:ignore [attr-defined]
+        assert obj.field_bool is True  # type:ignore [attr-defined]
+        assert obj.field_date == date(2021, 6, 4)  # type:ignore [attr-defined]
+        assert obj.field_datetime == datetime(  # type:ignore [attr-defined]
             2021, 6, 4, 18, 10, 30, 548000, tzinfo=pytz.UTC
         )
-        assert obj.field_decimal == Decimal("3.142")
-        assert obj.field_float == float(1)
-        assert obj.field_uuid == UUID("6f09460c-c82b-4c8f-9d94-8828402da52e")
-        assert obj.field_json == {"foo": "bar"}
+        assert obj.field_decimal == Decimal("3.142")  # type:ignore [attr-defined]
+        assert obj.field_float == float(1)  # type:ignore [attr-defined]
+        assert obj.field_uuid == UUID(  # type:ignore [attr-defined]
+            "6f09460c-c82b-4c8f-9d94-8828402da52e"
+        )
+        assert obj.field_json == {"foo": "bar"}  # type:ignore [attr-defined]
 
 
 @pytest.mark.django_db

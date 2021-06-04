@@ -28,11 +28,3 @@ repos:
       hooks:
           - id: mypy
             language_version: python3.9
-            args:
-                - --disallow-untyped-defs
-                - --disallow-incomplete-defs
-                - --check-untyped-defs
-                - --no-implicit-optional
-                - --ignore-missing-imports
-                - --follow-imports=silent
-            exclude: ^tests

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+from datetime import datetime
 from importlib import import_module
 
 from django.db import models
@@ -56,7 +57,7 @@ class FrozenObjectMeta:
 
     model: ModelName
     fields: dict[AttributeName, ModelKlass]
-    frozen_at: IsoTimestamp
+    frozen_at: datetime | IsoTimestamp
 
     @property
     def cls_name(self) -> str:
