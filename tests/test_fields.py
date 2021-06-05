@@ -7,7 +7,6 @@ from django.db.models.base import Model
 from frozen_field.fields import FrozenObjectField
 from frozen_field.models import FrozenObjectMeta
 from frozen_field.types import FrozenModel, is_dataclass_instance
-from tests.test_models import TEST_NOW
 
 from .models import DeepNestedModel, FlatModel, NestedModel
 

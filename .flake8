@@ -9,6 +9,11 @@ exclude =
   tests,
   migrations
 
+per-file-ignores =
+    # ignore assert, use of pickle
+    tests/test_*.py: S101, S403, S301
+
+
 ignore =
   # http://flake8.pycqa.org/en/2.5.5/warnings.html#warning-error-codes
   # pydocstyle - docstring conventions (PEP257)

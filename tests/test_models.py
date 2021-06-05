@@ -7,7 +7,6 @@ from uuid import UUID
 import freezegun
 import pytest
 import pytz
-from click import progressbar
 from django.db.models.fields import (
     BooleanField,
     DateField,
