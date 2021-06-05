@@ -28,7 +28,7 @@ class FrozenObjectField(models.JSONField):
         """
         Initialise FrozenObjectField.
 
-        The source_model argument can be a Model itself, or the "app.Model" path to
+        The model argument can be a Model itself, or the "app.Model" path to
         a model (supported in case of circ. import issues).
 
         The include argument is a list of fields on the app_model used to
@@ -113,7 +113,7 @@ class FrozenObjectField(models.JSONField):
         """
         if (obj := getattr(model_instance, self.attname)) is None:
             return obj
-        if is_dataclass_instance(obj, f"{self.frozen_model_name}"):
+        if is_dataclass_instance(obj, self.frozen_model_name):
             return obj
         if isinstance(obj, self.model_klass):
             return freeze_object(

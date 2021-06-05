@@ -5,11 +5,11 @@ from typing import Callable
 
 # mypy hints
 ModelName = str
-ModelKlass = str
+ModelClassPath = str
 AttributeName = str
 AttributeList = list[AttributeName]
 IsoTimestamp = str
-MetaFields = dict[AttributeName, ModelKlass]
+MetaFields = dict[AttributeName, ModelClassPath]
 # this looks useless, but helps keep function in/out aligned
 FrozenModel = object
 # see https://docs.python.org/3/library/pickle.html#object.__reduce__
@@ -18,7 +18,7 @@ PickleReducer = tuple[Callable, tuple[dict]]
 DeconstructTuple = tuple[str, str, list, dict]
 
 
-def klass_str(klass: object) -> ModelKlass:
+def klass_str(klass: object) -> ModelClassPath:
     """Return fully-qualified (namespaced) name for a class."""
     return f"{klass.__class__.__module__}.{klass.__class__.__qualname__}"
 

@@ -13,7 +13,7 @@ from .types import (
     AttributeName,
     FrozenModel,
     IsoTimestamp,
-    ModelKlass,
+    ModelClassPath,
     ModelName,
     PickleReducer,
     klass_str,
@@ -31,16 +31,17 @@ class FrozenObjectMeta:
     determining the destination field of each serialized JSON value.)
 
     As an example, a Decimal field on a model would be serialized (using the
-    DjanoJSONSerializer) as a string: `"cost": "1.49"`. When it comes to
+    DjangoJSONSerializer) as a string: `"cost": "1.49"`. When it comes to
     deserializing this value we need to know that it is a Decimal and not a
     string, which is where this meta model comes in. It serializes the structure
     of the model:
 
         {
-            "model": "core.Address",
+            "model": "app.Model",
             "fields": {
                 "cost": "django.db.models.fields.DecimalField"
-            }
+            },
+            "frozen_at": "2021-06-04T18:10:30.549Z"
         }
 
     When the JSON is deserialized, we can look up the type of the field, and use
@@ -56,7 +57,7 @@ class FrozenObjectMeta:
     """
 
     model: ModelName
-    fields: dict[AttributeName, ModelKlass]
+    fields: dict[AttributeName, ModelClassPath]
     frozen_at: datetime | IsoTimestamp
 
     @property
