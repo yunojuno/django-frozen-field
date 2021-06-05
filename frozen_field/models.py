@@ -10,6 +10,7 @@ from django.utils.timezone import now as tz_now
 
 from .types import (
     AttributeList,
+    FieldConverterMap,
     FrozenModel,
     IsoTimestamp,
     MetaFields,
@@ -123,7 +124,7 @@ class FrozenObjectMeta:
         # force blank, null as we have to deal with whatever we are given
         return getattr(import_module(module), klass)(blank=True, null=True)
 
-    def _cast(self, field_name: str, value: object) -> object:
+    def to_python(self, field_name: str, value: object) -> object:
         """Cast value using its underlying field.to_python method."""
         if field_name in self.properties:
             return value
@@ -229,16 +230,23 @@ def freeze_object(
     return dataklass(meta, **values)
 
 
-def unfreeze_object(frozen_object: dict) -> FrozenModel:
+def unfreeze_object(
+    frozen_object: dict, field_converters: FieldConverterMap | None = None
+) -> FrozenModel:
     """Deserialize a frozen object from stored JSON."""
     meta = FrozenObjectMeta(**frozen_object.pop("meta"))
     values: dict[str, object] = {}
+    field_converters = field_converters or {}
     for k, v in frozen_object.items():
         # if we find another frozen object, recurse
         if FrozenObjectMeta.has_meta(v):
             values[k] = unfreeze_object(v)
+        elif k in field_converters:
+            # if we find a specific override us that,
+            values[k] = field_converters[k](v)
         else:
-            values[k] = meta._cast(k, v)
+            # else fallback to the underlying field conversion
+            values[k] = meta.to_python(k, v)
     dataklass = meta.make_dataclass()
     return dataklass(meta, **values)
 

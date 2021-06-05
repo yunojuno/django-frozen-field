@@ -10,7 +10,13 @@ from django.utils.translation import gettext_lazy as _lazy
 
 from frozen_field.models import freeze_object, unfreeze_object
 
-from .types import AttributeList, DeconstructTuple, FrozenModel, is_dataclass_instance
+from .types import (
+    AttributeList,
+    DeconstructTuple,
+    FieldConverterMap,
+    FrozenModel,
+    is_dataclass_instance,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +33,7 @@ class FrozenObjectField(models.JSONField):
         exclude: AttributeList | None = None,
         select_related: AttributeList | None = None,
         select_properties: AttributeList | None = None,
+        converters: FieldConverterMap | None = None,
         **json_field_kwargs: object,
     ) -> None:
         """
@@ -50,6 +57,11 @@ class FrozenObjectField(models.JSONField):
         The select_properties argument is a list of model properties (not fields) that
         will be added to the serialized output.
 
+        The converters argument is a mapping of field_name to a callable that can be
+        used to convert the JSON representation to python during deserialization. By
+        default fields use the underlying field.to_python method, but this doesn't
+        always work, so this provides an override mechanism.
+
         The remaining kwargs are passed directly to the JSONField.
 
         """
@@ -67,6 +79,7 @@ class FrozenObjectField(models.JSONField):
         self.exclude = exclude or []
         self.select_related = select_related or []
         self.select_properties = select_properties or []
+        self.converters = converters or {}
         json_field_kwargs.setdefault("encoder", DjangoJSONEncoder)
         super().__init__(**json_field_kwargs)
 
@@ -99,7 +112,7 @@ class FrozenObjectField(models.JSONField):
             return value
         # use JSONField to convert from string to a dict
         if obj := super().from_db_value(value, expression, connection):
-            return unfreeze_object(obj)
+            return unfreeze_object(obj, self.converters)
         return None
 
     def get_prep_value(self, value: FrozenModel | None) -> dict | None:

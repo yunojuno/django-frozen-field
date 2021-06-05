@@ -85,8 +85,24 @@ object serialization, but could be extended in the future to support Django ORM
 The `select_properties` argument can be used to add model properties (e.g.
 methods decorated with `@property`) to the serialization. NB this currently does
 no casting of the value when deserialized (as it doesn't know what the type is),
-so if your property is a date, it will come back as a string (isoformat). This
-will be addressed in future with custom cast functions.
+so if your property is a date, it will come back as a string (isoformat). If you
+want it to return a `date` you will want to use converters.
+
+The `converters` argument is used to override the default conversion of the JSON
+back to something more appropriate. A typical use case would be the casting of a
+property which has no default backing field to use. In this case you could use
+the builtin Django `parse_date` function
+
+```python
+field = FrozenObjectField(
+    Profile,
+    include=[],
+    exclude=[],
+    select_related=[],
+    select_properties=["date_registered"],
+    converters={"date_registered": parse_date}
+)
+```
 
 ## How it works
 

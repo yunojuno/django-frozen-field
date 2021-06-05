@@ -7,15 +7,18 @@ from typing import Callable
 ModelName = str
 ModelClassPath = str
 AttributeName = str
+AttributeValue = object
 AttributeList = list[AttributeName]
 IsoTimestamp = str
 MetaFields = dict[AttributeName, ModelClassPath]
-# this looks useless, but helps keep function in/out aligned
 FrozenModel = object
 # see https://docs.python.org/3/library/pickle.html#object.__reduce__
 PickleReducer = tuple[Callable, tuple[dict]]
 # function call return value
 DeconstructTuple = tuple[str, str, list, dict]
+# used to define functions that overwrite default field to_python
+FieldConverter = Callable[[AttributeName], AttributeValue]
+FieldConverterMap = dict[AttributeName, FieldConverter]
 
 
 def klass_str(klass: object) -> ModelClassPath:

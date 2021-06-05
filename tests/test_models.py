@@ -29,7 +29,7 @@ from frozen_field.models import (
     unfreeze_object,
 )
 from frozen_field.types import AttributeList, is_dataclass_instance
-from tests.models import FlatModel, NestedModel
+from tests.models import FlatModel, NestedModel, to_date
 
 TEST_NOW = tz_now()
 
@@ -48,7 +48,7 @@ TEST_DATA = {
             "field_uuid": "django.db.models.fields.UUIDField",
             "field_json": "django.db.models.fields.json.JSONField",
         },
-        "properties": ["is_bool"],
+        "properties": ["is_bool", "today"],
         "frozen_at": "2021-06-04T18:10:30.549Z",
     },
     "id": 1,
@@ -62,6 +62,7 @@ TEST_DATA = {
     "field_uuid": "6f09460c-c82b-4c8f-9d94-8828402da52e",
     "field_json": {"foo": "bar"},
     "is_bool": True,
+    "today": "2021-06-01",
 }
 
 
@@ -207,13 +208,13 @@ class TestFrozenObjectMeta:
             ),
         ],
     )
-    def test__cast(self, field_path: str, input: str, output: object) -> None:
+    def test_to_python(self, field_path: str, input: str, output: object) -> None:
         meta = FrozenObjectMeta(
             model="tests.FlatModel",
             fields={"test_field": field_path},
             frozen_at=TEST_NOW,
         )
-        assert meta._cast("test_field", input) == output
+        assert meta.to_python("test_field", input) == output
 
     @pytest.mark.parametrize(
         "input,output",
@@ -224,7 +225,7 @@ class TestFrozenObjectMeta:
     )
     def test__cast__properties(self, input: str, output: object) -> None:
         meta = FrozenObjectMeta(model="tests.FlatModel", properties=["test_property"])
-        assert meta._cast("test_property", input) == output
+        assert meta.to_python("test_property", input) == output
 
 
 @pytest.mark.django_db
@@ -327,9 +328,10 @@ class TestFreezeObject:
         assert is_dataclass_instance(frozen_obj, "FrozenFlatModel")
         for f in frozen_obj.meta.frozen_attrs:  # type:ignore [attr-defined]
             assert getattr(flat, f) == getattr(frozen_obj, f)
+        assert isinstance(flat.today, date)
 
     def test_unfreeze_object(self) -> None:
-        obj = unfreeze_object(TEST_DATA)
+        obj = unfreeze_object(TEST_DATA.copy())
         assert obj is not None
         assert is_dataclass_instance(obj, "FrozenFlatModel")
         assert obj.id == 1  # type:ignore [attr-defined]
@@ -346,6 +348,16 @@ class TestFreezeObject:
             "6f09460c-c82b-4c8f-9d94-8828402da52e"
         )
         assert obj.field_json == {"foo": "bar"}  # type:ignore [attr-defined]
+        assert obj.is_bool is True  # type:ignore [attr-defined]
+        assert obj.today == "2021-06-01"  # type:ignore [attr-defined]
+
+    def test_unfreeze_object__converters(self) -> None:
+        # default unfreeze returns 'today' as a string - as it has no associated field
+        obj = unfreeze_object(TEST_DATA.copy())
+        assert obj.today == "2021-06-01"  # type:ignore [attr-defined]
+        # passing in a converter gets around this
+        obj = unfreeze_object(TEST_DATA.copy(), {"today": to_date})
+        assert obj.today == date(2021, 6, 1)  # type:ignore [attr-defined]
 
 
 @pytest.mark.django_db

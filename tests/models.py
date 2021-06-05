@@ -1,3 +1,5 @@
+from datetime import date, datetime
+
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 
@@ -6,6 +8,11 @@ from frozen_field.fields import FrozenObjectField
 
 class CustomJSONEncoder(DjangoJSONEncoder):
     """Custom encoder used to test field deconstruct method."""
+
+
+def to_date(value: str) -> date:
+    """Test field converter."""
+    return datetime.strptime(value, "%Y-%m-%d").date()
 
 
 class FlatModel(models.Model):
@@ -25,11 +32,17 @@ class FlatModel(models.Model):
         """Test model property."""
         return True
 
+    @property
+    def today(self) -> date:
+        """Test model property."""
+        return date.today()
+
 
 class NestedModel(models.Model):
     frozen = FrozenObjectField(
         FlatModel,
-        select_properties=["is_bool"],
+        select_properties=["is_bool", "today"],
+        converters={"today": to_date},
         null=True,
         blank=True,
     )
