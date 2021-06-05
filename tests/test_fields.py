@@ -2,7 +2,6 @@ from typing import Optional, Union
 from unittest import mock
 
 import pytest
-from django.core.exceptions import ValidationError
 from django.db.models.base import Model
 
 from frozen_field.fields import FrozenObjectField
@@ -24,6 +23,7 @@ class TestFrozenObjectField:
         assert field.include == []
         assert field.exclude == []
         assert field.select_related == []
+        assert field.select_properties == []
 
     @pytest.mark.parametrize("model", [None, 1, True])
     def test_initialisation__value_error(self, model: Union[str, Model]) -> None:
@@ -48,8 +48,11 @@ class TestFrozenObjectField:
         [
             (None, None),
             (
-                FrozenObjectMeta("tests.FlatModel", {}, "2021-06-04T18:10:30.549Z"),
-                '{"model": "tests.FlatModel", "fields": {}, "frozen_at": "2021-06-04T18:10:30.549Z"}',
+                FrozenObjectMeta("tests.FlatModel", {}, [], "2021-06-04T18:10:30.549Z"),
+                (
+                    '{"model": "tests.FlatModel", "fields": {}, "properties": [], '
+                    '"frozen_at": "2021-06-04T18:10:30.549Z"}'
+                ),
             ),
         ],
     )
@@ -89,10 +92,12 @@ class TestSerialization:
         # object has been saved, but not refreshed - so still a Model
         assert isinstance(nested.fresh, FlatModel)
         assert isinstance(nested.frozen, FlatModel)
+        nested.save()
         nested.refresh_from_db()
         assert isinstance(nested.fresh, FlatModel)
         # frozen field has been serialized and is now a FrozenObject
         assert is_dataclass_instance(nested.frozen, "FrozenFlatModel")
+        assert nested.frozen.is_bool
 
     def test_deep_nested(self, nested: NestedModel) -> None:
         """Test the full round-trip (save/refresh) recursively."""

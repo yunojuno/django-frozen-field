@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
 
 from django.apps import apps
 from django.core.serializers.json import DjangoJSONEncoder
@@ -10,6 +11,8 @@ from django.utils.translation import gettext_lazy as _lazy
 from frozen_field.models import freeze_object, unfreeze_object
 
 from .types import AttributeList, DeconstructTuple, FrozenModel, is_dataclass_instance
+
+logger = logging.getLogger(__name__)
 
 
 class FrozenObjectField(models.JSONField):
@@ -23,6 +26,7 @@ class FrozenObjectField(models.JSONField):
         include: AttributeList | None = None,
         exclude: AttributeList | None = None,
         select_related: AttributeList | None = None,
+        select_properties: AttributeList | None = None,
         **json_field_kwargs: object,
     ) -> None:
         """
@@ -43,6 +47,9 @@ class FrozenObjectField(models.JSONField):
         This list is appended to the include list when considering which fields to
         serialize.
 
+        The select_properties argument is a list of model properties (not fields) that
+        will be added to the serialized output.
+
         The remaining kwargs are passed directly to the JSONField.
 
         """
@@ -59,6 +66,7 @@ class FrozenObjectField(models.JSONField):
         self.include = include or []
         self.exclude = exclude or []
         self.select_related = select_related or []
+        self.select_properties = select_properties or []
         json_field_kwargs.setdefault("encoder", DjangoJSONEncoder)
         super().__init__(**json_field_kwargs)
 
@@ -78,6 +86,7 @@ class FrozenObjectField(models.JSONField):
         kwargs["include"] = self.include
         kwargs["exclude"] = self.exclude
         kwargs["select_related"] = self.select_related
+        kwargs["select_properties"] = self.select_properties
         args = [self.model_label]
         return name, path, args, kwargs
 
@@ -85,6 +94,7 @@ class FrozenObjectField(models.JSONField):
         self, value: str | None, expression: object, connection: object
     ) -> FrozenModel | None:
         """Deserialize db contents (json) back into original frozen dataclass."""
+        logger.debug("Deserializing frozen object from '%s'", value)
         if value is None:
             return value
         # use JSONField to convert from string to a dict
@@ -94,6 +104,7 @@ class FrozenObjectField(models.JSONField):
 
     def get_prep_value(self, value: FrozenModel | None) -> dict | None:
         """Convert frozen dataclass to stringified dict for serialization."""
+        logger.debug("FrozenObjectField.get_prep_value: '%r'", value)
         if value is None:
             return value
         # use JSONField to convert dict to string
@@ -111,15 +122,20 @@ class FrozenObjectField(models.JSONField):
         is already frozen, we just pass it back again.
 
         """
+        logger.debug("FrozenObjectField.pre_save: '%r'", model_instance)
         if (obj := getattr(model_instance, self.attname)) is None:
+            logger.debug("--> field value is empty")
             return obj
         if is_dataclass_instance(obj, self.frozen_model_name):
+            logger.debug("--> field value is already frozen")
             return obj
         if isinstance(obj, self.model_klass):
+            logger.debug("--> freezing field value: '%r'", obj)
             return freeze_object(
                 obj,
                 include=self.include,
                 exclude=self.exclude,
                 select_related=self.select_related,
+                select_properties=self.select_properties,
             )
         raise ValueError(f"model_instance '{self.attname}' value is invalid.")
