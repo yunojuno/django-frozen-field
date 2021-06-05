@@ -8,6 +8,7 @@ Django model custom field for storing a frozen snapshot of an object.
 * Transparent to the client - it looks like the original object
 * The frozen object cannot be edited
 * The frozen object cannot be saved
+* Works even if original model is updated or deleted
 
 ## Usage
 
@@ -21,6 +22,7 @@ class Profile(Model):
         include=[],           # defaults to all non-related fields if not set
         exclude=["line_2"],   # remove from set of fields to serialize
         select_related=[]     # add related fields to serialization
+        select_properties=["some_simple_property"]  # add model properties to serialization
     )
 ...
 
@@ -41,17 +43,16 @@ types.FrozenAddress
     "meta": {
         "pk": 1,
         "model": "Address",
-        "frozen_at": "...",
+        "frozen_at": "2021-06-04T18:10:30.549Z",
         "fields": {
             "id": "django.db.models.AutoField",
             "line_1": "django.db.models.CharField",
-            "line_2": "django.db.models.CharField"
         },
-        "include": ["id", "line_1"],
-        "exclude": ["line_2"],
+        "properties": ["some_simple_property"]
     },
     "id": 1,
-    "line_1": "29 Acacia Avenue"
+    "line_1": "29 Acacia Avenue",
+    "some_simple_property": "hello"
 }
 >>> profile.address.id
 1
@@ -80,6 +81,12 @@ That said, there is limited support for related object capture using the
 `select_related` argument. This currently only supports one level of child
 object serialization, but could be extended in the future to support Django ORM
 `parent__child` style chaining of fields.
+
+The `select_properties` argument can be used to add model properties (e.g.
+methods decorated with `@property`) to the serialization. NB this currently does
+no casting of the value when deserialized (as it doesn't know what the type is),
+so if your property is a date, it will come back as a string (isoformat). This
+will be addressed in future with custom cast functions.
 
 ## How it works
 
