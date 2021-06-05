@@ -95,6 +95,7 @@ class TestSerialization:
         assert is_dataclass_instance(nested.frozen, "FrozenFlatModel")
 
     def test_deep_nested(self, nested: NestedModel) -> None:
+        """Test the full round-trip (save/refresh) recursively."""
         nested.refresh_from_db()
         deep_nested = DeepNestedModel.objects.create(fresh=nested, frozen=nested)
         deep_nested.refresh_from_db()
@@ -105,3 +106,6 @@ class TestSerialization:
         assert is_dataclass_instance(deep_nested.fresh.frozen, "FrozenFlatModel")
         assert isinstance(deep_nested.fresh, NestedModel)
         assert isinstance(deep_nested.fresh.fresh, FlatModel)
+        # finally we check we can resave the fields that now contain frozen objects
+        deep_nested.save()
+        deep_nested.refresh_from_db()
