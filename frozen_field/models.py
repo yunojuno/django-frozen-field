@@ -102,22 +102,6 @@ class FrozenObjectMeta:
         klass.__module__ = __name__
         return klass
 
-    def parse_obj(self, obj: models.Model) -> dict[str, object]:
-        """Extract {attr: value} dict from a model instance using meta info."""
-        if obj._meta.label != self.model:
-            raise ValueError(
-                f"Incorrect object type; expected {self.model}, got {obj._meta.label}."
-            )
-        values: dict[str, object] = {}
-        for f in self.frozen_attrs:
-            val = getattr(obj, f)
-            if isinstance(val, models.Model):
-                frozen_obj = freeze_object(val)
-                values[f] = dataclasses.asdict(frozen_obj)
-            else:
-                values[f] = val
-        return values
-
     def _field(self, name: str) -> Field:
         """Return a Field object as represented by the field_name."""
         module, klass = self.fields[name].rsplit(".", 1)
@@ -154,6 +138,37 @@ def _gather_fields(
         related_fields = []
 
     return local_fields + related_fields
+
+
+def parse_obj(
+    meta: FrozenObjectMeta,
+    obj: models.Model,
+    include: AttributeList | None = None,
+    exclude: AttributeList | None = None,
+    select_related: AttributeList | None = None,
+    select_properties: AttributeList | None = None,
+) -> dict[str, object]:
+    """Extract {attr: value} dict from a model instance using meta info."""
+    if obj._meta.label != meta.model:
+        raise ValueError(
+            f"Incorrect object type; expected {meta.model}, got {obj._meta.label}."
+        )
+    values: dict[str, object] = {}
+    for f in meta.frozen_attrs:
+        val = getattr(obj, f)
+        if isinstance(val, models.Model):
+            frozen_obj = freeze_object(
+                val,
+                # TODO: refactor
+                include=[f.split("__")[1:] for f in include],
+                exclude=[f.split("__")[1:] for f in exclude],
+                select_related=[f.split("__")[1:] for f in select_related],
+                select_properties=[f.split("__")[1:] for f in select_properties],
+            )
+            values[f] = dataclasses.asdict(frozen_obj)
+        else:
+            values[f] = val
+    return values
 
 
 def create_meta(
@@ -218,6 +233,11 @@ def freeze_object(
     if obj is None:
         return obj
 
+    include = include or []
+    exclude = exclude or []
+    select_related = select_related or []
+    select_properties = select_properties or []
+
     meta = create_meta(
         obj.__class__,
         include=include,
@@ -226,7 +246,7 @@ def freeze_object(
         select_properties=select_properties,
     )
     dataklass = meta.make_dataclass()
-    values = meta.parse_obj(obj)
+    values = parse_obj(meta, obj, include, exclude, select_related, select_properties)
     return dataklass(meta, **values)
 
 
@@ -240,7 +260,8 @@ def unfreeze_object(
     for k, v in frozen_object.items():
         # if we find another frozen object, recurse
         if FrozenObjectMeta.has_meta(v):
-            values[k] = unfreeze_object(v)
+            converters = {k.split("__", 1)[1:]: v for k, v in field_converters.items()}
+            values[k] = unfreeze_object(v, converters)
         elif k in field_converters:
             # if we find a specific override us that,
             values[k] = field_converters[k](v)

@@ -26,6 +26,7 @@ from frozen_field.models import (
     _gather_fields,
     create_meta,
     freeze_object,
+    parse_obj,
     unfreeze_object,
 )
 from frozen_field.types import AttributeList, is_dataclass_instance
@@ -134,7 +135,7 @@ class TestFrozenObjectMeta:
             {"field_int": "django.db.models.fields.IntegerField"},
             ["is_bool"],
         )
-        assert meta.parse_obj(flat) == {"field_int": 999, "is_bool": True}
+        assert parse_obj(meta, flat) == {"field_int": 999, "is_bool": True}
 
     def test_parse_obj__value_error(self) -> None:
         """Test that the meta.model matches the model being parsed."""
@@ -144,14 +145,14 @@ class TestFrozenObjectMeta:
             {"field_int": "django.db.models.fields.IntegerField"},
         )
         with pytest.raises(ValueError):
-            meta.parse_obj(flat)
+            parse_obj(meta, flat)
 
     def test_parse_obj__error(self, flat: FlatModel) -> None:
         nested = NestedModel()
         meta = create_meta(FlatModel)
         assert meta is not None
         with pytest.raises(ValueError):
-            _ = meta.parse_obj(nested)
+            _ = parse_obj(meta, nested)
 
     @pytest.mark.parametrize(
         "field_path,field_klass",
