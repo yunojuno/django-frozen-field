@@ -48,6 +48,7 @@ TEST_DATA = {
             "field_uuid": "django.db.models.fields.UUIDField",
             "field_json": "django.db.models.fields.json.JSONField",
         },
+        "properties": ["is_bool"],
         "frozen_at": "2021-06-04T18:10:30.549Z",
     },
     "id": 1,
@@ -60,33 +61,37 @@ TEST_DATA = {
     "field_float": 1,
     "field_uuid": "6f09460c-c82b-4c8f-9d94-8828402da52e",
     "field_json": {"foo": "bar"},
+    "is_bool": True,
 }
 
 
 @pytest.mark.django_db
 class TestFrozenObjectMeta:
+    @freezegun.freeze_time(TEST_NOW)
+    def test_defaults(self) -> None:
+        meta = FrozenObjectMeta(model="tests.FlatModel")
+        assert meta.fields == {}
+        assert meta.properties == []
+        assert meta.frozen_at == TEST_NOW
+
     def test_cls_name(self) -> None:
-        meta = FrozenObjectMeta(
-            model="tests.FlatModel",
-            fields={},
-            frozen_at=tz_now(),
-        )
+        meta = FrozenObjectMeta(model="tests.FlatModel")
         assert meta.cls_name == "FrozenFlatModel"
 
     @pytest.mark.parametrize(
-        "fields,frozen_attrs",
+        "fields,properties,frozen_attrs",
         [
-            ({}, []),
-            ({"foo": 1}, ["foo"]),
-            ({"foo": 1, "bar": False}, ["foo", "bar"]),
+            ({}, [], []),
+            ({"foo": 1}, [], ["foo"]),
+            ({"foo": 1}, ["bar"], ["foo", "bar"]),
+            ({}, ["bar"], ["bar"]),
+            ({"foo": 1, "bar": False}, [], ["foo", "bar"]),
         ],
     )
-    def test_frozen_attrs(self, fields: dict, frozen_attrs: AttributeList) -> None:
-        meta = FrozenObjectMeta(
-            model="tests.FlatModel",
-            fields=fields,
-            frozen_at=tz_now(),
-        )
+    def test_frozen_attrs(
+        self, fields: dict, properties: AttributeList, frozen_attrs: AttributeList
+    ) -> None:
+        meta = FrozenObjectMeta("tests.FlatModel", fields, properties)
         assert meta.frozen_attrs == frozen_attrs
 
     @pytest.mark.parametrize(
@@ -105,6 +110,7 @@ class TestFrozenObjectMeta:
         meta = FrozenObjectMeta(
             "tests.FlatModel",
             {"field_int": "django.db.models.fields.IntegerField"},
+            [],
             frozen_at=tz_now(),
         )
         klass = meta.make_dataclass()
@@ -125,9 +131,9 @@ class TestFrozenObjectMeta:
         meta = FrozenObjectMeta(
             "tests.FlatModel",
             {"field_int": "django.db.models.fields.IntegerField"},
-            frozen_at=tz_now(),
+            ["is_bool"],
         )
-        assert meta.parse_obj(flat) == {"field_int": 999}
+        assert meta.parse_obj(flat) == {"field_int": 999, "is_bool": True}
 
     def test_parse_obj__value_error(self) -> None:
         """Test that the meta.model matches the model being parsed."""
@@ -135,7 +141,6 @@ class TestFrozenObjectMeta:
         meta = FrozenObjectMeta(
             "tests.FlatMdoel",
             {"field_int": "django.db.models.fields.IntegerField"},
-            frozen_at=tz_now(),
         )
         with pytest.raises(ValueError):
             meta.parse_obj(flat)
@@ -209,6 +214,17 @@ class TestFrozenObjectMeta:
             frozen_at=TEST_NOW,
         )
         assert meta._cast("test_field", input) == output
+
+    @pytest.mark.parametrize(
+        "input,output",
+        [
+            (1, 1),
+            ("1", "1"),
+        ],
+    )
+    def test__cast__properties(self, input: str, output: object) -> None:
+        meta = FrozenObjectMeta(model="tests.FlatModel", properties=["test_property"])
+        assert meta._cast("test_property", input) == output
 
 
 @pytest.mark.django_db

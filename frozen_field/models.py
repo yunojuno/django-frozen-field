@@ -10,10 +10,9 @@ from django.utils.timezone import now as tz_now
 
 from .types import (
     AttributeList,
-    AttributeName,
     FrozenModel,
     IsoTimestamp,
-    ModelClassPath,
+    MetaFields,
     ModelName,
     PickleReducer,
     klass_str,
@@ -41,6 +40,7 @@ class FrozenObjectMeta:
             "fields": {
                 "cost": "django.db.models.fields.DecimalField"
             },
+            "properties": ["full_name"],
             "frozen_at": "2021-06-04T18:10:30.549Z"
         }
 
@@ -57,8 +57,9 @@ class FrozenObjectMeta:
     """
 
     model: ModelName
-    fields: dict[AttributeName, ModelClassPath]
-    frozen_at: datetime | IsoTimestamp
+    fields: MetaFields = dataclasses.field(default_factory=dict)
+    properties: AttributeList = dataclasses.field(default_factory=list)
+    frozen_at: datetime | IsoTimestamp = dataclasses.field(default_factory=tz_now)
 
     @property
     def cls_name(self) -> str:
@@ -67,8 +68,8 @@ class FrozenObjectMeta:
 
     @property
     def frozen_attrs(self) -> AttributeList:
-        """Return list of frozen attr names - taken from fields dict."""
-        return list(self.fields.keys())
+        """Return list of frozen attr names, inc. properties."""
+        return list(self.fields.keys()) + self.properties
 
     @classmethod
     def has_meta(cls, value: object) -> bool:
@@ -124,6 +125,8 @@ class FrozenObjectMeta:
 
     def _cast(self, field_name: str, value: object) -> object:
         """Cast value using its underlying field.to_python method."""
+        if field_name in self.properties:
+            return value
         field = self._field(field_name)
         return field.to_python(value)
 
@@ -157,6 +160,7 @@ def create_meta(
     include: AttributeList | None = None,
     exclude: AttributeList | None = None,
     select_related: AttributeList | None = None,
+    select_properties: AttributeList | None = None,
 ) -> FrozenObjectMeta:
     """
     Create a new meta object from a model instance.
@@ -189,6 +193,7 @@ def create_meta(
     return FrozenObjectMeta(
         model=klass._meta.label,
         fields={f.name: klass_str(f) for f in fields},
+        properties=(select_properties or []),
         frozen_at=tz_now(),
     )
 
@@ -198,6 +203,7 @@ def freeze_object(
     include: AttributeList | None = None,
     exclude: AttributeList | None = None,
     select_related: AttributeList | None = None,
+    select_properties: AttributeList | None = None,
 ) -> FrozenModel | None:
     """
     Create a new dataclass containing meta info and object properties.
@@ -216,6 +222,7 @@ def freeze_object(
         include=include,
         exclude=exclude,
         select_related=select_related,
+        select_properties=select_properties,
     )
     dataklass = meta.make_dataclass()
     values = meta.parse_obj(obj)

@@ -20,10 +20,16 @@ class FlatModel(models.Model):
     field_uuid = models.UUIDField()
     field_json = models.JSONField(null=True)
 
+    @property
+    def is_bool(self) -> bool:
+        """Test model property."""
+        return True
+
 
 class NestedModel(models.Model):
     frozen = FrozenObjectField(
         FlatModel,
+        select_properties=["is_bool"],
         null=True,
         blank=True,
     )

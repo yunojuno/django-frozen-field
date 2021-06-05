@@ -6,8 +6,6 @@ exclude =
   .git,
   .venv,
   .tox,
-  tests,
-  migrations
 
 ignore =
   # http://flake8.pycqa.org/en/2.5.5/warnings.html#warning-error-codes
@@ -25,3 +23,7 @@ ignore =
   S308  # [bandit] Use of mark_safe
   S311  # [bandit] Use of random
   S703  # [bandit] Use of django_mark_safe
+
+per-file-ignores =
+    # ignore assert, use of pickle
+    tests/test_*.py: S101, S403, S301
