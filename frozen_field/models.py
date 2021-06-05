@@ -4,19 +4,16 @@ import dataclasses
 from datetime import datetime
 from importlib import import_module
 
-from django.db import models
 from django.db.models.fields import Field
 from django.utils.timezone import now as tz_now
 
 from .types import (
     AttributeList,
-    FieldConverterMap,
     FrozenModel,
     IsoTimestamp,
-    MetaFields,
+    MetaFieldMap,
     ModelName,
     PickleReducer,
-    klass_str,
 )
 
 
@@ -58,7 +55,7 @@ class FrozenObjectMeta:
     """
 
     model: ModelName
-    fields: MetaFields = dataclasses.field(default_factory=dict)
+    fields: MetaFieldMap = dataclasses.field(default_factory=dict)
     properties: AttributeList = dataclasses.field(default_factory=list)
     frozen_at: datetime | IsoTimestamp = dataclasses.field(default_factory=tz_now)
 
@@ -116,162 +113,6 @@ class FrozenObjectMeta:
         return field.to_python(value)
 
 
-def _gather_fields(
-    klass: type[models.Model],
-    include: AttributeList | None,
-    exclude: AttributeList | None,
-    select_related: AttributeList | None,
-) -> list[Field]:
-    """Return subset of obj fields that will be serialized."""
-    local_fields = [f for f in klass._meta.local_fields if not f.related_model]
-    related_fields = [f for f in klass._meta.local_fields if f.related_model]
-
-    if include:
-        local_fields = [f for f in local_fields if f.name in include]
-
-    if exclude:
-        local_fields = [f for f in local_fields if f.name not in exclude]
-
-    if select_related:
-        related_fields = [f for f in related_fields if f.name in select_related]
-    else:
-        related_fields = []
-
-    return local_fields + related_fields
-
-
-def parse_obj(
-    meta: FrozenObjectMeta,
-    obj: models.Model,
-    include: AttributeList | None = None,
-    exclude: AttributeList | None = None,
-    select_related: AttributeList | None = None,
-    select_properties: AttributeList | None = None,
-) -> dict[str, object]:
-    """Extract {attr: value} dict from a model instance using meta info."""
-    if obj._meta.label != meta.model:
-        raise ValueError(
-            f"Incorrect object type; expected {meta.model}, got {obj._meta.label}."
-        )
-    values: dict[str, object] = {}
-    for f in meta.frozen_attrs:
-        val = getattr(obj, f)
-        if isinstance(val, models.Model):
-            frozen_obj = freeze_object(
-                val,
-                # TODO: refactor
-                include=[f.split("__")[1:] for f in include],
-                exclude=[f.split("__")[1:] for f in exclude],
-                select_related=[f.split("__")[1:] for f in select_related],
-                select_properties=[f.split("__")[1:] for f in select_properties],
-            )
-            values[f] = dataclasses.asdict(frozen_obj)
-        else:
-            values[f] = val
-    return values
-
-
-def create_meta(
-    klass: type[models.Model],
-    include: AttributeList | None = None,
-    exclude: AttributeList | None = None,
-    select_related: AttributeList | None = None,
-    select_properties: AttributeList | None = None,
-) -> FrozenObjectMeta:
-    """
-    Create a new meta object from a model instance.
-
-    The rules around the field parsing is as follows:
-
-    * By default, all non-related attrs are "included"
-    * By details, all related attrs are "excluded"
-    * "included" and "excluded" are mutually exclusive
-    * "included" takes precedence - use to select a subset of fields
-    * "excluded" is used to remove fields from the default set
-    * "fields" contains all of the local fields on the model,
-        regardless of whether they are included or excluded - this
-        is the master list of properties at the point of freezing.
-    * "select_related" contains any additional related fields that should be
-        added to the "include" list. Empty by default.
-
-    All of the above are parsed to produce two lists - "include" and "exclude" that
-    contain all of the local_fields.
-
-    """
-    if not issubclass(klass, models.Model):
-        raise ValueError("'obj' must be a Django model")
-
-    if include and exclude:
-        raise ValueError("'include' and 'exclude' are mutually exclusive.")
-
-    fields = _gather_fields(klass, include, exclude, select_related)
-
-    return FrozenObjectMeta(
-        model=klass._meta.label,
-        fields={f.name: klass_str(f) for f in fields},
-        properties=(select_properties or []),
-        frozen_at=tz_now(),
-    )
-
-
-def freeze_object(
-    obj: models.Model,
-    include: AttributeList | None = None,
-    exclude: AttributeList | None = None,
-    select_related: AttributeList | None = None,
-    select_properties: AttributeList | None = None,
-) -> FrozenModel | None:
-    """
-    Create a new dataclass containing meta info and object properties.
-
-    The process for freezing a Model instance is to first create the meta object
-    that defines which fields we want to freeze, using that to create a new dynamic
-    dataclass, and then creating an instance of the dataclass. It is this intermediate
-    object that is serialized.
-
-    """
-    if obj is None:
-        return obj
-
-    include = include or []
-    exclude = exclude or []
-    select_related = select_related or []
-    select_properties = select_properties or []
-
-    meta = create_meta(
-        obj.__class__,
-        include=include,
-        exclude=exclude,
-        select_related=select_related,
-        select_properties=select_properties,
-    )
-    dataklass = meta.make_dataclass()
-    values = parse_obj(meta, obj, include, exclude, select_related, select_properties)
-    return dataklass(meta, **values)
-
-
-def unfreeze_object(
-    frozen_object: dict, field_converters: FieldConverterMap | None = None
-) -> FrozenModel:
-    """Deserialize a frozen object from stored JSON."""
-    meta = FrozenObjectMeta(**frozen_object.pop("meta"))
-    values: dict[str, object] = {}
-    field_converters = field_converters or {}
-    for k, v in frozen_object.items():
-        # if we find another frozen object, recurse
-        if FrozenObjectMeta.has_meta(v):
-            converters = {k.split("__", 1)[1:]: v for k, v in field_converters.items()}
-            values[k] = unfreeze_object(v, converters)
-        elif k in field_converters:
-            # if we find a specific override us that,
-            values[k] = field_converters[k](v)
-        else:
-            # else fallback to the underlying field conversion
-            values[k] = meta.to_python(k, v)
-    dataklass = meta.make_dataclass()
-    return dataklass(meta, **values)
-
-
 def _reduce(obj: FrozenModel) -> PickleReducer:
     """
     Return a tuple for use as the dataclass __reduce__ method.
@@ -302,4 +143,7 @@ def _reduce(obj: FrozenModel) -> PickleReducer:
 
     """
     data = dataclasses.asdict(obj)
+    # circ. import issue
+    from .serializers import unfreeze_object
+
     return (unfreeze_object, (data,))

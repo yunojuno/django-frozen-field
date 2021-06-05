@@ -6,9 +6,9 @@ from django.db.models.base import Model
 
 from frozen_field.fields import FrozenObjectField
 from frozen_field.models import FrozenObjectMeta
-from frozen_field.types import FrozenModel, is_dataclass_instance
+from frozen_field.types import FrozenModel
 
-from .models import DeepNestedModel, FlatModel, NestedModel
+from .models import FlatModel
 
 
 @pytest.mark.django_db
@@ -74,42 +74,3 @@ class TestFrozenObjectField:
     ) -> None:
         field = FrozenObjectField(FlatModel)
         assert field.from_db_value(value, None, None) == result
-
-
-@pytest.mark.django_db
-class TestSerialization:
-    """Group together serialization functions."""
-
-    def test_serialization(self, flat: FlatModel) -> None:
-        nested = NestedModel.objects.create(frozen=None, fresh=flat)
-        nested.refresh_from_db()
-        assert nested.frozen is None
-        nested.frozen = nested.fresh
-        nested.save()
-
-    def test_deserialization(self, nested: NestedModel) -> None:
-        # object has been saved, but not refreshed - so still a Model
-        assert isinstance(nested.fresh, FlatModel)
-        assert isinstance(nested.frozen, FlatModel)
-        nested.save()
-        nested.refresh_from_db()
-        assert isinstance(nested.fresh, FlatModel)
-        # frozen field has been serialized and is now a FrozenObject
-        assert is_dataclass_instance(nested.frozen, "FrozenFlatModel")
-        assert nested.frozen.is_bool
-
-    def test_deep_nested(self, nested: NestedModel) -> None:
-        """Test the full round-trip (save/refresh) recursively."""
-        nested.refresh_from_db()
-        deep_nested = DeepNestedModel.objects.create(fresh=nested, frozen=nested)
-        deep_nested.refresh_from_db()
-        assert is_dataclass_instance(deep_nested.frozen, "FrozenNestedModel")
-        assert is_dataclass_instance(deep_nested.frozen.frozen, "FrozenFlatModel")
-        # "frozen.fresh" is included as it is defined in 'selected_related'.
-        assert is_dataclass_instance(deep_nested.frozen.fresh, "FrozenFlatModel")
-        assert is_dataclass_instance(deep_nested.fresh.frozen, "FrozenFlatModel")
-        assert isinstance(deep_nested.fresh, NestedModel)
-        assert isinstance(deep_nested.fresh.fresh, FlatModel)
-        # finally we check we can resave the fields that now contain frozen objects
-        deep_nested.save()
-        deep_nested.refresh_from_db()

@@ -4,13 +4,17 @@ import dataclasses
 from typing import Callable
 
 # mypy hints
+
+# e.g. "tests.FlatModel"
 ModelName = str
+# e.g. "django.db.models.fields.DateField"
 ModelClassPath = str
 AttributeName = str
 AttributeValue = object
 AttributeList = list[AttributeName]
 IsoTimestamp = str
-MetaFields = dict[AttributeName, ModelClassPath]
+# {"date_registered": "django.db.models.fields.DateField"}
+MetaFieldMap = dict[AttributeName, ModelClassPath]
 FrozenModel = object
 # see https://docs.python.org/3/library/pickle.html#object.__reduce__
 PickleReducer = tuple[Callable, tuple[dict]]
