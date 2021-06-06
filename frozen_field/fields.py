@@ -107,7 +107,7 @@ class FrozenObjectField(models.JSONField):
         self, value: str | None, expression: object, connection: object
     ) -> FrozenModel | None:
         """Deserialize db contents (json) back into original frozen dataclass."""
-        logger.debug("Deserializing frozen object from '%s'", value)
+        logger.debug("--> Deserializing frozen object from '%s'", value)
         if value is None:
             return value
         # use JSONField to convert from string to a dict
@@ -117,7 +117,7 @@ class FrozenObjectField(models.JSONField):
 
     def get_prep_value(self, value: FrozenModel | None) -> dict | None:
         """Convert frozen dataclass to stringified dict for serialization."""
-        logger.debug("FrozenObjectField.get_prep_value: '%r'", value)
+        logger.debug("--> FrozenObjectField.get_prep_value: '%r'", value)
         if value is None:
             return value
         # use JSONField to convert dict to string
@@ -135,7 +135,7 @@ class FrozenObjectField(models.JSONField):
         is already frozen, we just pass it back again.
 
         """
-        logger.debug("FrozenObjectField.pre_save: '%r'", model_instance)
+        logger.debug("--> FrozenObjectField.pre_save: '%r'", model_instance)
         if (obj := getattr(model_instance, self.attname)) is None:
             logger.debug("--> field value is empty")
             return obj

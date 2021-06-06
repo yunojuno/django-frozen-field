@@ -1,11 +1,61 @@
 from __future__ import annotations
 
-import pytest
+import pickle
+from datetime import date, datetime
+from decimal import Decimal
+from uuid import UUID
 
-from frozen_field.serializers import split_list, strip_dict
+import pytest
+import pytz
+
+from frozen_field.serializers import (
+    freeze_object,
+    gather_fields,
+    split_list,
+    strip_dict,
+    unfreeze_object,
+)
 from frozen_field.types import AttributeList, AttributeName, is_dataclass_instance
 
 from .models import DeepNestedModel, FlatModel, NestedModel
+
+
+def to_date(value: str) -> date:
+    """Test field converter."""
+    return datetime.strptime(value, "%Y-%m-%d").date()
+
+
+TEST_DATA = {
+    "meta": {
+        "model": "tests.FlatModel",
+        "fields": {
+            "id": "django.db.models.fields.AutoField",
+            "field_int": "django.db.models.fields.IntegerField",
+            "field_str": "django.db.models.fields.TextField",
+            "field_bool": "django.db.models.fields.BooleanField",
+            "field_date": "django.db.models.fields.DateField",
+            "field_datetime": "django.db.models.fields.DateTimeField",
+            "field_decimal": "django.db.models.fields.DecimalField",
+            "field_float": "django.db.models.fields.FloatField",
+            "field_uuid": "django.db.models.fields.UUIDField",
+            "field_json": "django.db.models.fields.json.JSONField",
+        },
+        "properties": ["is_bool", "today"],
+        "frozen_at": "2021-06-04T18:10:30.549Z",
+    },
+    "id": 1,
+    "field_int": 999,
+    "field_str": "This is some text",
+    "field_bool": True,
+    "field_date": "2021-06-04",
+    "field_datetime": "2021-06-04T18:10:30.548Z",
+    "field_decimal": "3.142",
+    "field_float": 1,
+    "field_uuid": "6f09460c-c82b-4c8f-9d94-8828402da52e",
+    "field_json": {"foo": "bar"},
+    "is_bool": True,
+    "today": "2021-06-01",
+}
 
 
 @pytest.mark.django_db
@@ -49,7 +99,7 @@ class TestSerialization:
     def test_attr_chaining(self, deep: DeepNestedModel) -> None:
         """Test deep serialization of partial fields."""
         deep.refresh_from_db()
-        assert deep.partial.frozen.data() == {"field_int": 999}
+        assert deep.partial.frozen.json_data() == {"field_int": 999}
 
 
 @pytest.mark.parametrize(
@@ -82,3 +132,78 @@ def test_strip_dict(input: dict, field_name: AttributeName, output: dict) -> Non
 )
 def test_split_list(input: AttributeList, output: AttributeList) -> None:
     assert split_list(input) == output
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "include,exclude,select_related,result",
+    [
+        ([], [], [], ["id", "frozen"]),
+        (["id"], [], [], ["id"]),
+        ([], ["id"], [], ["frozen"]),
+        ([], ["id"], ["fresh"], ["frozen", "fresh"]),
+        (["id"], [], ["fresh"], ["id", "fresh"]),
+        ([], [], ["fresh"], ["id", "frozen", "fresh"]),
+    ],
+)
+def test_gather_fields(
+    include: AttributeList,
+    exclude: AttributeList,
+    select_related: AttributeList,
+    result: AttributeList,
+) -> None:
+    fields = gather_fields(NestedModel, include, exclude, select_related)
+    assert [f.name for f in fields] == result
+
+
+@pytest.mark.django_db
+class TestFreezeObject:
+    """Group together tests for freeze / unfreeze functions."""
+
+    def test_freeze_object__none(self) -> None:
+        assert freeze_object(None) is None
+
+    def test_freeze_object(self, flat: FlatModel) -> None:
+        frozen_obj = freeze_object(flat)
+        assert frozen_obj is not None
+        assert is_dataclass_instance(frozen_obj, "FrozenFlatModel")
+        for f in frozen_obj.meta.frozen_attrs:  # type:ignore [attr-defined]
+            assert getattr(flat, f) == getattr(frozen_obj, f)
+        assert isinstance(flat.today, date)
+
+    def test_unfreeze_object(self) -> None:
+        obj = unfreeze_object(TEST_DATA.copy())
+        assert obj is not None
+        assert is_dataclass_instance(obj, "FrozenFlatModel")
+        assert obj.id == 1  # type:ignore [attr-defined]
+        assert obj.field_int == 999  # type:ignore [attr-defined]
+        assert obj.field_str == "This is some text"  # type:ignore [attr-defined]
+        assert obj.field_bool is True  # type:ignore [attr-defined]
+        assert obj.field_date == date(2021, 6, 4)  # type:ignore [attr-defined]
+        assert obj.field_datetime == datetime(  # type:ignore [attr-defined]
+            2021, 6, 4, 18, 10, 30, 548000, tzinfo=pytz.UTC
+        )
+        assert obj.field_decimal == Decimal("3.142")  # type:ignore [attr-defined]
+        assert obj.field_float == float(1)  # type:ignore [attr-defined]
+        assert obj.field_uuid == UUID(  # type:ignore [attr-defined]
+            "6f09460c-c82b-4c8f-9d94-8828402da52e"
+        )
+        assert obj.field_json == {"foo": "bar"}  # type:ignore [attr-defined]
+        assert obj.is_bool is True  # type:ignore [attr-defined]
+        assert obj.today == "2021-06-01"  # type:ignore [attr-defined]
+
+    def test_unfreeze_object__converters(self) -> None:
+        # default unfreeze returns 'today' as a string - as it has no associated field
+        obj = unfreeze_object(TEST_DATA.copy())
+        assert obj.today == "2021-06-01"  # type:ignore [attr-defined]
+        # passing in a converter gets around this
+        obj = unfreeze_object(TEST_DATA.copy(), {"today": to_date})
+        assert obj.today == date(2021, 6, 1)  # type:ignore [attr-defined]
+
+
+@pytest.mark.django_db
+def test_pickle_frozen_object(flat: FlatModel) -> None:
+    frozen = freeze_object(flat)
+    p = pickle.dumps(frozen)
+    q = pickle.loads(p)
+    assert q == frozen

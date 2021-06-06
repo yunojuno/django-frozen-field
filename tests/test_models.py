@@ -1,5 +1,4 @@
 import dataclasses
-import pickle
 from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
@@ -21,44 +20,10 @@ from django.db.models.fields import (
 from django.db.models.fields.json import JSONField
 from django.utils.timezone import now as tz_now
 
-from frozen_field.models import FrozenObjectMeta
-from frozen_field.serializers import freeze_object, gather_fields, unfreeze_object
-from frozen_field.types import AttributeList, is_dataclass_instance
-from tests.models import FlatModel, NestedModel, to_date
+from frozen_field.models import FrozenObjectMeta, strip_meta
+from frozen_field.types import AttributeList
 
 TEST_NOW = tz_now()
-
-TEST_DATA = {
-    "meta": {
-        "model": "tests.FlatModel",
-        "fields": {
-            "id": "django.db.models.fields.AutoField",
-            "field_int": "django.db.models.fields.IntegerField",
-            "field_str": "django.db.models.fields.TextField",
-            "field_bool": "django.db.models.fields.BooleanField",
-            "field_date": "django.db.models.fields.DateField",
-            "field_datetime": "django.db.models.fields.DateTimeField",
-            "field_decimal": "django.db.models.fields.DecimalField",
-            "field_float": "django.db.models.fields.FloatField",
-            "field_uuid": "django.db.models.fields.UUIDField",
-            "field_json": "django.db.models.fields.json.JSONField",
-        },
-        "properties": ["is_bool", "today"],
-        "frozen_at": "2021-06-04T18:10:30.549Z",
-    },
-    "id": 1,
-    "field_int": 999,
-    "field_str": "This is some text",
-    "field_bool": True,
-    "field_date": "2021-06-04",
-    "field_datetime": "2021-06-04T18:10:30.548Z",
-    "field_decimal": "3.142",
-    "field_float": 1,
-    "field_uuid": "6f09460c-c82b-4c8f-9d94-8828402da52e",
-    "field_json": {"foo": "bar"},
-    "is_bool": True,
-    "today": "2021-06-01",
-}
 
 
 @pytest.mark.django_db
@@ -112,7 +77,7 @@ class TestFrozenObjectMeta:
         klass = meta.make_dataclass()
         assert [f.name for f in dataclasses.fields(klass)] == ["meta", "field_int"]
         obj1 = klass(meta, 999)
-        assert obj1.data() == {"field_int": 999}
+        assert obj1.json_data() == {"field_int": 999}
         assert obj1.__module__ == "frozen_field.models"
         with pytest.raises(dataclasses.FrozenInstanceError):
             obj1.field_int = 0
@@ -177,7 +142,9 @@ class TestFrozenObjectMeta:
             ),
         ],
     )
-    def test_to_python(self, field_path: str, input: str, output: object) -> None:
+    def test_to_python_fields(
+        self, field_path: str, input: str, output: object
+    ) -> None:
         meta = FrozenObjectMeta(
             model="tests.FlatModel",
             fields={"test_field": field_path},
@@ -192,85 +159,46 @@ class TestFrozenObjectMeta:
             ("1", "1"),
         ],
     )
-    def test__cast__properties(self, input: str, output: object) -> None:
+    def test_to_python__properties(self, input: str, output: object) -> None:
         meta = FrozenObjectMeta(model="tests.FlatModel", properties=["test_property"])
         assert meta.to_python("test_property", input) == output
 
 
 @pytest.mark.django_db
-class TestCreateMeta:
-    """Group together create_meta function tests."""
-
-    @pytest.mark.parametrize(
-        "include,exclude,select_related,result",
-        [
-            ([], [], [], ["id", "frozen"]),
-            (["id"], [], [], ["id"]),
-            ([], ["id"], [], ["frozen"]),
-            ([], ["id"], ["fresh"], ["frozen", "fresh"]),
-            (["id"], [], ["fresh"], ["id", "fresh"]),
-            ([], [], ["fresh"], ["id", "frozen", "fresh"]),
-        ],
-    )
-    def test_gather_fields(
-        self,
-        include: AttributeList,
-        exclude: AttributeList,
-        select_related: AttributeList,
-        result: AttributeList,
-    ) -> None:
-        fields = gather_fields(NestedModel, include, exclude, select_related)
-        assert [f.name for f in fields] == result
-
-
-@pytest.mark.django_db
-class TestFreezeObject:
-    """Group together tests for freeze / unfreeze functions."""
-
-    def test_freeze_object__none(self) -> None:
-        assert freeze_object(None) is None
-
-    def test_freeze_object(self, flat: FlatModel) -> None:
-        frozen_obj = freeze_object(flat)
-        assert frozen_obj is not None
-        assert is_dataclass_instance(frozen_obj, "FrozenFlatModel")
-        for f in frozen_obj.meta.frozen_attrs:  # type:ignore [attr-defined]
-            assert getattr(flat, f) == getattr(frozen_obj, f)
-        assert isinstance(flat.today, date)
-
-    def test_unfreeze_object(self) -> None:
-        obj = unfreeze_object(TEST_DATA.copy())
-        assert obj is not None
-        assert is_dataclass_instance(obj, "FrozenFlatModel")
-        assert obj.id == 1  # type:ignore [attr-defined]
-        assert obj.field_int == 999  # type:ignore [attr-defined]
-        assert obj.field_str == "This is some text"  # type:ignore [attr-defined]
-        assert obj.field_bool is True  # type:ignore [attr-defined]
-        assert obj.field_date == date(2021, 6, 4)  # type:ignore [attr-defined]
-        assert obj.field_datetime == datetime(  # type:ignore [attr-defined]
-            2021, 6, 4, 18, 10, 30, 548000, tzinfo=pytz.UTC
-        )
-        assert obj.field_decimal == Decimal("3.142")  # type:ignore [attr-defined]
-        assert obj.field_float == float(1)  # type:ignore [attr-defined]
-        assert obj.field_uuid == UUID(  # type:ignore [attr-defined]
-            "6f09460c-c82b-4c8f-9d94-8828402da52e"
-        )
-        assert obj.field_json == {"foo": "bar"}  # type:ignore [attr-defined]
-        assert obj.is_bool is True  # type:ignore [attr-defined]
-        assert obj.today == "2021-06-01"  # type:ignore [attr-defined]
-
-    def test_unfreeze_object__converters(self) -> None:
-        # default unfreeze returns 'today' as a string - as it has no associated field
-        obj = unfreeze_object(TEST_DATA.copy())
-        assert obj.today == "2021-06-01"  # type:ignore [attr-defined]
-        # passing in a converter gets around this
-        obj = unfreeze_object(TEST_DATA.copy(), {"today": to_date})
-        assert obj.today == date(2021, 6, 1)  # type:ignore [attr-defined]
-
-
-@pytest.mark.django_db
-def test_pickle_frozen_object(flat: FlatModel) -> None:
-    frozen = freeze_object(flat)
-    p = pickle.dumps(frozen)
-    q = pickle.loads(p)
-    assert q == frozen
+def test_strip_meta(deep: dict) -> None:
+    deep = {
+        "meta": {
+            "model": "tests.NestedModel",
+            "fields": {
+                "id": "django.db.models.fields.AutoField",
+                "frozen": "frozen_field.fields.FrozenObjectField",
+                "fresh": "django.db.models.fields.related.ForeignKey",
+            },
+            "properties": [],
+            "frozen_at": "2021-06-06T13:26:03.655Z",
+        },
+        "id": 1,
+        "frozen": {
+            "meta": {
+                "model": "tests.FlatModel",
+                "fields": {
+                    "id": "django.db.models.fields.AutoField",
+                },
+                "properties": [],
+                "frozen_at": "2021-06-06T13:26:03.655Z",
+            },
+            "id": 1,
+        },
+        "fresh": {
+            "meta": {
+                "model": "tests.FlatModel",
+                "fields": {
+                    "id": "django.db.models.fields.AutoField",
+                },
+                "properties": [],
+                "frozen_at": "2021-06-06T13:26:03.656Z",
+            },
+            "id": 1,
+        },
+    }
+    assert strip_meta(deep) == {"id": 1, "frozen": {"id": 1}, "fresh": {"id": 1}}

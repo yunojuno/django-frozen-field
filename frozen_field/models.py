@@ -17,6 +17,55 @@ from .types import (
 )
 
 
+def _reduce(obj: FrozenModel) -> PickleReducer:
+    """
+    Return a tuple for use as the dataclass __reduce__ method.
+
+    Dynamically-created dataclass don't pickle well as pickle can't find
+    the class in the module (as it doesn't exist). To get around this we
+    need to provide the dataclass with a `__reduce__` method that pickle
+    can use.
+
+    See https://docs.python.org/3/library/pickle.html#object.__reduce__
+
+    Because the model doesn't exist we take the second option in the article
+    above:
+
+        > When a tuple is returned, it must be between two and six items long.
+        > Optional items can either be omitted, or None can be provided as their
+        > value. The semantics of each item are in order:
+        >
+        > A callable object that will be called to create the initial version of
+        > the object.
+        >
+        > A tuple of arguments for the callable object. An empty tuple must be
+        > given if the callable does not accept any argument.
+
+    The return value is a 2-tuple that contains a function used to reproduce the
+    object, and a 1-tuple containing the argument to be passed to the function,
+    which in this case is the dict representation of the dataclass.
+
+    """
+    data = dataclasses.asdict(obj)
+    # circ. import issue
+    from .serializers import unfreeze_object
+
+    return (unfreeze_object, (data,))
+
+
+def strip_meta(value: dict) -> dict:
+    """Strip the "meta" node from dict, recursively."""
+    result = {}
+    for k, v in value.items():
+        if k == "meta":
+            continue
+        if isinstance(v, dict):
+            result[k] = strip_meta(v)
+        else:
+            result[k] = v
+    return result
+
+
 @dataclasses.dataclass
 class FrozenObjectMeta:
     """
@@ -91,9 +140,8 @@ class FrozenObjectMeta:
                 "__reduce__": _reduce,
                 # consider two objs equal if all properties match
                 "__eq__": lambda obj1, obj2: vars(obj1) == vars(obj2),
-                "data": lambda obj: {
-                    k: v for k, v in dataclasses.asdict(obj).items() if k != "meta"
-                },
+                # 'clean' dict by removing "meta" nodes - just the attrs
+                "json_data": lambda obj: strip_meta(dataclasses.asdict(obj)),
             },
         )
         klass.__module__ = __name__
@@ -111,39 +159,3 @@ class FrozenObjectMeta:
             return value
         field = self._field(field_name)
         return field.to_python(value)
-
-
-def _reduce(obj: FrozenModel) -> PickleReducer:
-    """
-    Return a tuple for use as the dataclass __reduce__ method.
-
-    Dynamically-created dataclass don't pickle well as pickle can't find
-    the class in the module (as it doesn't exist). To get around this we
-    need to provide the dataclass with a `__reduce__` method that pickle
-    can use.
-
-    See https://docs.python.org/3/library/pickle.html#object.__reduce__
-
-    Because the model doesn't exist we take the second option in the article
-    above:
-
-        > When a tuple is returned, it must be between two and six items long.
-        > Optional items can either be omitted, or None can be provided as their
-        > value. The semantics of each item are in order:
-        >
-        > A callable object that will be called to create the initial version of
-        > the object.
-        >
-        > A tuple of arguments for the callable object. An empty tuple must be
-        > given if the callable does not accept any argument.
-
-    The return value is a 2-tuple that contains a function used to reproduce the
-    object, and a 1-tuple containing the argument to be passed to the function,
-    which in this case is the dict representation of the dataclass.
-
-    """
-    data = dataclasses.asdict(obj)
-    # circ. import issue
-    from .serializers import unfreeze_object
-
-    return (unfreeze_object, (data,))
