@@ -4,11 +4,88 @@ Django model custom field for storing a frozen snapshot of an object.
 
 ## Principles
 
-* Behaves _like_ a `ForeignKey` but the data is detached from the related object
+* Behaves like a `ForeignKey` but the data is detached from the related object
 * Transparent to the client - it looks like the original object
 * The frozen object cannot be edited
 * The frozen object cannot be saved
 * Works even if original model is updated or deleted
+
+### Why not use DRF / Django serializers?
+
+This library has one specific requirement that makes using the existing
+solutions hard - to be able to decouple the frozen data from the model, such
+that it can be altered or even deleted, and the data can still be used. We use
+the model itself once, when we first save the data - from that point on the
+field has no dependency on the original model, using intermediate dynamic
+dataclasses that represent the model as it was when the data was saved. This
+package does reference a lot of the principles in both DRF and Django itself -
+and the structure of the serialized data is similar to that exported from the
+queryset serializer.
+
+### Why not just store frozen data as JSON and be done with it?
+
+This is probably a good / safe option for most codebases coming to the freezing
+of data for the first time, and we have a lot of ephemeral data stored in
+`JSONField` fields ourselves. However, migrating an existing project from
+`ForeignKey` to `JSONField`, along with all references to the data, templates,
+etc., is painful. This package is designed to make the migration from 'fresh' to
+'frozen' as simple as possible.
+
+## Package internals
+
+The package includes three core modules, `serializers`, `models`, and `fields`,
+that together control the serialization process.
+
+#### `frozen_field.models`
+
+This module contains the engine of the package, which is a `FrozenObjectMeta`
+dataclass that is responsible for parsing Django model attributes, extracting
+data and and creating the dynamic dataclasses used to represent a Django Model.
+
+You should not need to use this module in your application.
+
+#### `frozen_field.serializers`
+
+This module contains the `freeze_object` and `unfreeze_object` functions that
+are responsible for marshalling the serialized data between a Django Model
+instance, a dynamic dataclass, and the serialized JSON..
+
+On first save:
+
+    model >> dataclass >> dict
+
+On first refresh:
+
+    dict >> dataclass
+
+On subsequent saves:
+
+    dataclass >> dict
+
+You should not need to use this module in your application.
+
+#### `frozen_field.fields`
+
+This module contains the `FrozenObjectField` itself - it is the only part of the
+package that should need to use yourself.
+
+#### Evolution of `FrozenObjectField`
+
+The easiest way to understand why the field is structured as it is is to follow
+the history:
+
+1. The first implementation serialized just non-related object fields (i.e.
+   excluded `ForeignKey` and `OneToOneField` attrs)
+1. The `include` and `exclude` arguments were added to control which fields were
+   serialized
+1. The `select_related` argument was added to enable the serialization of
+   top-level related objects (`ForeignKey` / `OneToOneField`)
+1. The `select_properties` argument was added to enable the serialization of
+   simple model properties (`@property`)
+1. Support was added for ORM-style paths (using the `__` delimiter) to enable
+   deep serialization beyond the top-level
+1. The `converters` argument was added to enable fine-tuning of the
+   deserialization process.
 
 ## Usage
 
@@ -18,12 +95,14 @@ A frozen field can be declared like a `ForeignKey`:
 class Profile(Model):
 
     address = FrozenObjectField(
-        Address,              # The model being frozen - used in validation
-        include=[],           # defaults to all non-related fields if not set
-        exclude=["line_2"],   # remove from set of fields to serialize
-        select_related=[]     # add related fields to serialization
-        select_properties=["some_simple_property"]  # add model properties to serialization
+        Address,                         # The model being frozen
+        include=[],                      # defaults to all
+        exclude=["line_2"],              # defaults to none
+        select_related=[]                # add related fields
+        select_properties=["attr_name"]  # add model properties
+        converters={"field_name": func}  # custom deserializer
     )
+
 ...
 
 >>> profile.address = Address.objects.get(...)
@@ -36,8 +115,12 @@ Address
 >>> profile.refresh_from_db()
 >>> type(profile.address)
 types.FrozenAddress
+>>> profile.address.id
+1
 >>> profile.address.line_1
 "29 Acacia Avenue"
+>>> profile.address.since
+datetime.date(2011, 6, 4)
 >>> dataclasses.asdict(profile.address)
 {
     "meta": {
@@ -47,15 +130,22 @@ types.FrozenAddress
         "fields": {
             "id": "django.db.models.AutoField",
             "line_1": "django.db.models.CharField",
+            "since": "django.db.models.DateField"
         },
-        "properties": ["some_simple_property"]
+        "properties": ["attr_name"]
     },
     "id": 1,
     "line_1": "29 Acacia Avenue",
-    "some_simple_property": "hello"
+    "since": "2011-06-04T18:10:30.549Z"
+    "attr_name": "hello"
 }
->>> profile.address.id
-1
+>>> profile.address.json_data()
+{
+    "id": 1,
+    "line_1": "29 Acacia Avenue",
+    "since": "2011-06-04T18:10:30.549Z",
+    "attr_name": "hello"
+}
 >>> profile.address.id = 2
 FrozenInstanceError: cannot assign to field 'id'
 >>> profile.address.save()
@@ -77,10 +167,8 @@ attributes being serialized. If `included` is not empty, then *only* the fields
 in the list are serialized. If `excluded` is not empty then all fields *except*
 those in the list are serialized.
 
-That said, there is limited support for related object capture using the
-`select_related` argument. This currently only supports one level of child
-object serialization, but could be extended in the future to support Django ORM
-`parent__child` style chaining of fields.
+That said, there is support for related object capture using the
+`select_related` argument.
 
 The `select_properties` argument can be used to add model properties (e.g.
 methods decorated with `@property`) to the serialization. NB this currently does
@@ -120,7 +208,8 @@ own `django.core.serializers` work.
 
 #### Running tests
 
-The tests use `pytest` as the test runner. If you have installed the `poetry` evironment, you can run them using:
+The tests use `pytest` as the test runner. If you have installed the `poetry`
+evironment, you can run them using:
 
 ```
 $ poetry run pytest
