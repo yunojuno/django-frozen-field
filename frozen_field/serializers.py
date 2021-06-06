@@ -114,15 +114,20 @@ def freeze_object(
 
 
 def unfreeze_object(
-    frozen_object: dict, field_converters: FieldConverterMap | None = None
+    frozen_object: dict | None, field_converters: FieldConverterMap | None = None
 ) -> FrozenModel:
     """Deserialize a frozen object from stored JSON."""
+    if not frozen_object:
+        return None
     meta = FrozenObjectMeta(**frozen_object.pop("meta"))
     values: dict[str, object] = {}
     field_converters = field_converters or {}
     for k, v in frozen_object.items():
-        # if we find another frozen object, recurse
-        if FrozenObjectMeta.has_meta(v):
+        # if we've stored None, return None - don't attempt to cast
+        if v is None:
+            values[k] = v
+        # if we find another frozen object, recurse.
+        if meta.is_related_field(k) or meta.is_frozen_field(k):
             converters = strip_dict(field_converters, k)
             values[k] = unfreeze_object(v, converters)
         elif k in field_converters:

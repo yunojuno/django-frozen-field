@@ -55,17 +55,59 @@ class TestFrozenObjectMeta:
         meta = FrozenObjectMeta("tests.FlatModel", fields, properties)
         assert meta.frozen_attrs == frozen_attrs
 
-    @pytest.mark.parametrize(
-        "value,has_meta",
-        [
-            ({}, False),
-            ({"foo": 1}, False),
-            ({"meta": {}}, False),
-            ({"meta": {"frozen_at": tz_now()}}, True),
-        ],
-    )
-    def test_has_meta(self, value: dict, has_meta: bool) -> None:
-        assert FrozenObjectMeta.has_meta(value) == has_meta
+    def test_is_related_field(self) -> None:
+        meta = FrozenObjectMeta(
+            "test.Dummy",
+            {
+                "fk": "django.db.models.fields.related.ForeignKey",
+                "one2one": "django.db.models.fields.related.OneToOneField",
+                "frozen": "frozen_field.fields.FrozenObjectField",
+                "str": "django.db.models.fields.CharField",
+            },
+            ["prop"],
+            tz_now(),
+        )
+        assert meta.is_related_field("fk") is True
+        assert meta.is_related_field("one2one") is True
+        assert meta.is_related_field("frozen") is False
+        assert meta.is_related_field("str") is False
+        assert meta.is_related_field("prop") is False
+
+    def test_is_frozen_field(self) -> None:
+        meta = FrozenObjectMeta(
+            "test.Dummy",
+            {
+                "fk": "django.db.models.fields.related.ForeignKey",
+                "one2one": "django.db.models.fields.related.OneToOneField",
+                "frozen": "frozen_field.fields.FrozenObjectField",
+                "str": "django.db.models.fields.CharField",
+            },
+            ["prop"],
+            tz_now(),
+        )
+        assert meta.is_frozen_field("fk") is False
+        assert meta.is_frozen_field("one2one") is False
+        assert meta.is_frozen_field("frozen") is True
+        assert meta.is_frozen_field("str") is False
+        assert meta.is_frozen_field("prop") is False
+
+    def test_is_property(self) -> None:
+        meta = FrozenObjectMeta(
+            "test.Dummy",
+            {
+                "fk": "django.db.models.fields.related.ForeignKey",
+                "one2one": "django.db.models.fields.related.OneToOneField",
+                "frozen": "frozen_field.fields.FrozenObjectField",
+                "str": "django.db.models.fields.CharField",
+            },
+            ["prop"],
+            tz_now(),
+        )
+        assert meta.is_property("fk") is False
+        assert meta.is_property("one2one") is False
+        assert meta.is_property("frozen") is False
+        assert meta.is_property("str") is False
+        assert meta.is_property("prop") is True
 
     def test_make_dataclass(self) -> None:
         meta = FrozenObjectMeta(

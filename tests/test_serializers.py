@@ -172,6 +172,7 @@ class TestFreezeObject:
         assert isinstance(flat.today, date)
 
     def test_unfreeze_object(self) -> None:
+        assert unfreeze_object(None) is None
         obj = unfreeze_object(TEST_DATA.copy())
         assert obj is not None
         assert is_dataclass_instance(obj, "FrozenFlatModel")

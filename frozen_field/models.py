@@ -118,16 +118,23 @@ class FrozenObjectMeta:
         """Return list of frozen attr names, inc. properties."""
         return list(self.fields.keys()) + self.properties
 
-    @classmethod
-    def has_meta(cls, value: object) -> bool:
-        """Return True if value looks like it contains a meta dict."""
-        if not value:
+    def is_related_field(self, field_name: str) -> bool:
+        """Return True if the field_name is a ForeignKey / OneToOneField."""
+        if field_name in self.properties:
             return False
+        _, klass = self.fields[field_name].rsplit(".", 1)
+        return klass in ["ForeignKey", "OneToOneField"]
 
-        if not isinstance(value, dict):
+    def is_frozen_field(self, field_name: str) -> bool:
+        """Return True if the fied_name is a FrozenObjectField."""
+        if field_name in self.properties:
             return False
+        _, klass = self.fields[field_name].rsplit(".", 1)
+        return klass == "FrozenObjectField"
 
-        return "meta" in value and "frozen_at" in value["meta"]
+    def is_property(self, field_name: str) -> bool:
+        """Return True if the fied_name is a property, not a field."""
+        return field_name in self.properties
 
     def make_dataclass(self) -> type:
         """Create dynamic dataclass from the meta info."""
@@ -153,7 +160,7 @@ class FrozenObjectMeta:
         # force blank, null as we have to deal with whatever we are given
         return getattr(import_module(module), klass)(blank=True, null=True)
 
-    def to_python(self, field_name: str, value: object) -> object:
+    def to_python(self, field_name: str, value: object) -> object | None:
         """Cast value using its underlying field.to_python method."""
         if field_name in self.properties:
             return value
