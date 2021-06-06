@@ -99,6 +99,7 @@ class FrozenObjectField(models.JSONField):
         kwargs["exclude"] = self.exclude
         kwargs["select_related"] = self.select_related
         kwargs["select_properties"] = self.select_properties
+        kwargs["converters"] = self.converters
         args = [self.model_label]
         return name, path, args, kwargs
 
