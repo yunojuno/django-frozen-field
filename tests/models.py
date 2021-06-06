@@ -63,6 +63,13 @@ class DeepNestedModel(models.Model):
         null=True,
         blank=True,
     )
+    partial = FrozenObjectField(
+        "tests.NestedModel",
+        encoder=CustomJSONEncoder,
+        include=["frozen__field_int"],
+        null=True,
+        blank=True,
+    )
     fresh = models.ForeignKey(
         NestedModel,
         on_delete=models.CASCADE,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from frozen_field.serializers import strip_dict, strip_list
+from frozen_field.serializers import split_list, strip_dict
 from frozen_field.types import AttributeList, AttributeName, is_dataclass_instance
 
 from .models import DeepNestedModel, FlatModel, NestedModel
@@ -46,22 +46,10 @@ class TestSerialization:
         deep_nested.save()
         deep_nested.refresh_from_db()
 
-
-@pytest.mark.parametrize(
-    "input,field_name,output",
-    [
-        ([""], "foo", []),
-        (["foo"], "foo", []),
-        (["foo__bar"], "foo", ["bar"]),
-        (["foo__bar__baz"], "foo", ["bar__baz"]),
-        (["bar__foo__baz"], "foo", []),
-        (["foo", "foo__bar", "foo__bar__baz"], "foo", ["bar", "bar__baz"]),
-    ],
-)
-def test_strip_list(
-    input: AttributeList, field_name: AttributeName, output: AttributeList
-) -> None:
-    assert strip_list(input, field_name) == output
+    def test_attr_chaining(self, deep: DeepNestedModel) -> None:
+        """Test deep serialization of partial fields."""
+        deep.refresh_from_db()
+        assert deep.partial.frozen.data() == {"field_int": 999}
 
 
 @pytest.mark.parametrize(
@@ -81,3 +69,16 @@ def test_strip_list(
 )
 def test_strip_dict(input: dict, field_name: AttributeName, output: dict) -> None:
     assert strip_dict(input, field_name) == output
+
+
+@pytest.mark.parametrize(
+    "input,output",
+    [
+        ([""], []),
+        (["foo"], ["foo"]),
+        (["foo__bar"], ["foo"]),
+        (["foo", "foo__bar", "foo__bar__baz"], ["foo"]),
+    ],
+)
+def test_split_list(input: AttributeList, output: AttributeList) -> None:
+    assert split_list(input) == output

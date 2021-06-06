@@ -31,6 +31,7 @@ def _nested(flat: FlatModel) -> NestedModel:
 def _deep(nested: NestedModel) -> DeepNestedModel:
     return DeepNestedModel.objects.create(
         frozen=nested,
+        partial=nested,
         fresh=nested,
     )
 

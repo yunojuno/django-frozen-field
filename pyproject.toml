@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "django-frozen-field"
-version = "0.1.beta4"
+version = "0.1.beta5"
 description = "Django model field used to store snapshot of data."
 license = "MIT"
 authors = ["YunoJuno <code@yunojuno.com>"]
@@ -42,6 +42,7 @@ black = {version = "*", allow-prereleases = true}
 freezegun = "*"
 tox = "*"
 ipython = "*"
+flake8-print = "^4.0.0"
 
 [build-system]
 requires = ["poetry>=0.12"]
