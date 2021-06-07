@@ -36,17 +36,21 @@ class FrozenObjectDescriptor:
 
     """
 
-    def __init__(self, field):
+    def __init__(self, field: models.Field) -> None:
         self.field = field
 
     # See https://stackoverflow.com/a/2350728/45698
-    def __get__(self, instance, owner=None):
+    def __get__(
+        self, instance: models.Model, owner: object = None
+    ) -> FrozenModel | None:
         if instance is None:
             raise AttributeError("Can only be accessed via an instance.")
         return instance.__dict__.get(self.field.name, None)
 
     # See https://stackoverflow.com/a/2350728/45698
-    def __set__(self, instance, value):
+    def __set__(
+        self, instance: models.Model, value: models.Model | FrozenModel | None
+    ) -> None:
         if value is None:
             return value
         if isinstance(value, models.Model):
@@ -57,9 +61,9 @@ class FrozenObjectDescriptor:
                 select_related=self.field.select_related,
                 select_properties=self.field.select_properties,
             )
-        if not is_dataclass_instance(value):
-            raise ValueError("value must be a Model or dataclass")
-        instance.__dict__[self.field.name] = value
+        if is_dataclass_instance(value):
+            instance.__dict__[self.field.name] = value
+        raise ValueError("'value' arg must be a Model or dataclass")
 
 
 class FrozenObjectField(models.JSONField):
@@ -133,7 +137,7 @@ class FrozenObjectField(models.JSONField):
         """Return Model type - it may have been set as a str."""
         return apps.get_model(*self.model_label.split("."))
 
-    def contribute_to_class(self, cls, name):
+    def contribute_to_class(self, cls: models.Model, name: str) -> None:
         """Add FrozenObjectDescriptor to handle field setting."""
         super().contribute_to_class(cls, name)
         setattr(cls, self.name, FrozenObjectDescriptor(self))
