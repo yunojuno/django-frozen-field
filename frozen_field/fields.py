@@ -63,6 +63,7 @@ class FrozenObjectDescriptor:
             )
         if is_dataclass_instance(value):
             instance.__dict__[self.field.name] = value
+            return
         raise ValueError("'value' arg must be a Model or dataclass")
 
 
