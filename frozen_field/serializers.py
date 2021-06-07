@@ -40,20 +40,27 @@ def gather_fields(
     local_fields = [f for f in klass._meta.local_fields if not f.related_model]
     related_fields = [f for f in klass._meta.local_fields if f.related_model]
 
-    if include:
-        local_fields = [f for f in local_fields if f.name in split_list(include)]
+    # we may be chaining fields, and have a related_field in the include list
+    # print(f"include: {include} -> {split_list(include)}")
+    # print(f"exclude: {exclude} -> {split_list(exclude)}")
+    # print(f"select_related: {select_related} -> {split_list(select_related)}")
 
-    if exclude:
-        local_fields = [f for f in local_fields if f.name not in split_list(exclude)]
+    if include:
+        _local = [f for f in local_fields if f.name in split_list(include)]
+        _related = [f for f in related_fields if f.name in split_list(include)]
+    # include and exclude are mutually exclusive
+    elif exclude:
+        _local = [f for f in local_fields if f.name not in split_list(exclude)]
+        _related = []
+    # default option is all local fields, no related fields
+    else:
+        _local = local_fields
+        _related = []
 
     if select_related:
-        related_fields = [
-            f for f in related_fields if f.name in split_list(select_related)
-        ]
-    else:
-        related_fields = []
+        _related += [f for f in related_fields if f.name in split_list(select_related)]
 
-    return local_fields + related_fields
+    return _local + _related
 
 
 def freeze_object(
@@ -85,6 +92,7 @@ def freeze_object(
     select_properties = select_properties or []
 
     fields = gather_fields(obj.__class__, include, exclude, select_related)
+    # print(f"Freezing object [{obj}] with fields: {fields}")
     meta = FrozenObjectMeta(
         model=obj.__class__._meta.label,
         fields={f.name: klass_str(f) for f in fields},
@@ -98,6 +106,7 @@ def freeze_object(
         if isinstance(val, models.Model):
             # ok - we're going again, but before we do we need to strip
             # off the current field prefix from all values in the AttributeLists
+            print(f" -> subfreezing field '{f}' [{val}] with fields: {fields}")
             frozen_obj = freeze_object(
                 val,
                 _next_level(include, f),
@@ -106,6 +115,17 @@ def freeze_object(
                 _next_level(select_properties, f),
             )
             values[f] = dataclasses.asdict(frozen_obj)
+        elif dataclasses.is_dataclass(val):
+            print(f" -> ignoring frozen object '{f}'")
+            if (
+                deep_fields := _next_level(include, f)
+                + _next_level(exclude, f)
+                + _next_level(select_related, f)
+                + _next_level(select_properties, f)
+            ):
+                raise Exception(f"You cannot control this: {deep_fields}")
+            print(deep_fields)
+            values[f] = val
         else:
             values[f] = val
 
