@@ -67,6 +67,7 @@ class DeepNestedModel(models.Model):
         "tests.NestedModel",
         encoder=CustomJSONEncoder,
         include=["fresh__field_int"],
+        select_properties=["fresh__today"],
         null=True,
         blank=True,
     )

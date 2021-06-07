@@ -63,8 +63,7 @@ class FrozenObjectDescriptor:
                     self.field.select_related,
                 )
             ]
-            print(f"setting {instance.__class__.__name__}.{self.field.name} to {value}")
-            print(f"..fields = {fields}")
+            print(f"--> FREEZING FIELD: {self.field.name}={value}; fields={fields}")
             value = freeze_object(
                 value,
                 include=self.field.include,
