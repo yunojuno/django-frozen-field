@@ -211,7 +211,7 @@ class TestFrozenObjectMeta:
         """Test the descriptor."""
         nested = NestedModel()
         nested.frozen = flat
-        assert dataclasses.is_dataclass(nested.frozen)
+        assert is_dataclass_instance(nested.frozen, "FrozenFlatModel")
 
 
 @pytest.mark.django_db

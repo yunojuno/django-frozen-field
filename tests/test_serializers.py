@@ -72,7 +72,7 @@ class TestSerialization:
     def test_deserialization(self, nested: NestedModel) -> None:
         # object has been saved, but not refreshed - so still a Model
         assert isinstance(nested.fresh, FlatModel)
-        assert isinstance(nested.frozen, FlatModel)
+        assert is_dataclass_instance(nested.frozen, "FrozenFlatModel")
         nested.save()
         nested.refresh_from_db()
         assert isinstance(nested.fresh, FlatModel)
@@ -99,6 +99,8 @@ class TestSerialization:
     def test_attr_chaining(self, deep: DeepNestedModel) -> None:
         """Test deep serialization of partial fields."""
         deep.refresh_from_db()
+        print(f"deep.partial.meta: {deep.partial.meta}")
+        print(f"deep.partial.frozen.meta: {deep.partial.frozen.meta}")
         assert deep.partial.frozen.json_data() == {"field_int": 999}
 
 
