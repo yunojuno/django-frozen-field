@@ -46,9 +46,9 @@ class TestFrozenObjectMeta:
         [
             ({}, [], []),
             ({"foo": 1}, [], ["foo"]),
-            ({"foo": 1}, ["bar"], ["foo", "bar"]),
+            ({"foo": 1}, ["bar"], ["bar", "foo"]),
             ({}, ["bar"], ["bar"]),
-            ({"foo": 1, "bar": False}, [], ["foo", "bar"]),
+            ({"foo": 1, "bar": False}, [], ["bar", "foo"]),
         ],
     )
     def test_frozen_attrs(

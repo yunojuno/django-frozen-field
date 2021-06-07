@@ -8,7 +8,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from django.utils.translation import gettext_lazy as _lazy
 
-from .serializers import freeze_object, gather_fields, unfreeze_object
+from .serializers import freeze_object, unfreeze_object
 from .types import (
     AttributeList,
     DeconstructTuple,
@@ -54,16 +54,6 @@ class FrozenObjectDescriptor:
         if value is None:
             return value
         if isinstance(value, models.Model):
-            fields = [
-                f.name
-                for f in gather_fields(
-                    value,
-                    self.field.include,
-                    self.field.exclude,
-                    self.field.select_related,
-                )
-            ]
-            print(f"--> FREEZING FIELD: {self.field.name}={value}; fields={fields}")
             value = freeze_object(
                 value,
                 include=self.field.include,
@@ -71,10 +61,9 @@ class FrozenObjectDescriptor:
                 select_related=self.field.select_related,
                 select_properties=self.field.select_properties,
             )
-        if is_dataclass_instance(value):
-            instance.__dict__[self.field.name] = value
-            return
-        raise ValueError("'value' arg must be a Model or dataclass")
+        if not is_dataclass_instance(value):
+            raise ValueError("'value' arg must be a Model or dataclass")
+        instance.__dict__[self.field.name] = value
 
 
 class FrozenObjectField(models.JSONField):

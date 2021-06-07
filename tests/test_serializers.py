@@ -96,25 +96,18 @@ class TestSerialization:
         deep_nested.save()
         deep_nested.refresh_from_db()
 
-    def test_attr_chaining(self, flat: FlatModel) -> None:
+    def test_attr_chaining(self, deep: DeepNestedModel) -> None:
         """Test deep serialization of partial fields."""
-        print("Creating empty nested model")
-        nested = NestedModel()
-        print("Setting fresh value")
-        nested.fresh = flat
-        print("Setting frozen value")
-        nested.frozen = flat
-        print("Creating empty deep nested model")
-        deep = DeepNestedModel()
-        print("Setting fresh value")
-        deep.fresh = nested
-        print("Setting frozen value")
-        deep.frozen = nested
-        print(f"deep.fresh: '{deep.fresh}'")
-        print(f"deep.frozen: '{deep.frozen}'")
-        print(deep.frozen.json_data())
-        # deep.refresh_from_db()
-        # assert deep.partial.fresh.json_data() == {"field_int": 999}
+        deep.refresh_from_db()
+        print("=======\ndeep\n-------\n", deep)
+        print("=======\ndeep.fresh\n-------\n", deep.fresh)
+        print("=======\ndeep.fresh.fresh\n-------\n", deep.fresh.fresh)
+        print("=======\ndeep.fresh.frozen\n-------\n", deep.fresh.frozen)
+        print("=======\ndeep.frozen\n-------\n", deep.frozen)
+        print("=======\ndeep.frozen.fresh\n-------\n", deep.frozen.fresh)
+        print("=======\ndeep.frozen.frozen\n-------\n", deep.frozen.frozen)
+        print("=======\ndeep.partial\n-------\n", deep.partial)
+        print("=======\ndeep.partial.fresh\n-------\n", deep.partial.fresh)
 
 
 @pytest.mark.parametrize(

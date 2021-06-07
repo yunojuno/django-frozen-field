@@ -116,7 +116,7 @@ class FrozenObjectMeta:
     @property
     def frozen_attrs(self) -> AttributeList:
         """Return list of frozen attr names, inc. properties."""
-        return list(set(list(self.fields.keys()) + self.properties))
+        return sorted(list(set(list(self.fields.keys()) + self.properties)))
 
     def is_related_field(self, field_name: str) -> bool:
         """Return True if the field_name is a ForeignKey / OneToOneField."""
