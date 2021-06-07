@@ -98,10 +98,8 @@ class TestSerialization:
 
     def test_attr_chaining(self, deep: DeepNestedModel) -> None:
         """Test deep serialization of partial fields."""
-        # deep.refresh_from_db()
-        print(f"deep.partial.meta: {deep.partial.meta}")
-        print(f"deep.partial.frozen.meta: {deep.partial.frozen.meta}")
-        # assert deep.partial.frozen.json_data() == {"field_int": 999}
+        deep.refresh_from_db()
+        assert deep.partial.fresh.json_data() == {"field_int": 999}
 
 
 @pytest.mark.parametrize(

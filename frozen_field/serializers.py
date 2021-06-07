@@ -6,6 +6,7 @@ from django.db import models
 from django.db.models.fields import Field
 from django.utils.timezone import now as tz_now
 
+from .exceptions import FrozenObjectError
 from .models import FrozenObjectMeta
 from .types import (
     AttributeList,
@@ -39,11 +40,6 @@ def gather_fields(
     """Return subset of obj fields that will be serialized."""
     local_fields = [f for f in klass._meta.local_fields if not f.related_model]
     related_fields = [f for f in klass._meta.local_fields if f.related_model]
-
-    # we may be chaining fields, and have a related_field in the include list
-    # print(f"include: {include} -> {split_list(include)}")
-    # print(f"exclude: {exclude} -> {split_list(exclude)}")
-    # print(f"select_related: {select_related} -> {split_list(select_related)}")
 
     if include:
         _local = [f for f in local_fields if f.name in split_list(include)]
@@ -92,7 +88,6 @@ def freeze_object(
     select_properties = select_properties or []
 
     fields = gather_fields(obj.__class__, include, exclude, select_related)
-    # print(f"Freezing object [{obj}] with fields: {fields}")
     meta = FrozenObjectMeta(
         model=obj.__class__._meta.label,
         fields={f.name: klass_str(f) for f in fields},
@@ -106,7 +101,6 @@ def freeze_object(
         if isinstance(val, models.Model):
             # ok - we're going again, but before we do we need to strip
             # off the current field prefix from all values in the AttributeLists
-            print(f" -> subfreezing field '{f}' [{val}] with fields: {fields}")
             frozen_obj = freeze_object(
                 val,
                 _next_level(include, f),
@@ -116,15 +110,22 @@ def freeze_object(
             )
             values[f] = dataclasses.asdict(frozen_obj)
         elif dataclasses.is_dataclass(val):
-            print(f" -> ignoring frozen object '{f}'")
+            # we have a pre-frozen dataclass. if the user has specified
+            # specific fields to be controlled in this object then we
+            # fail hard - if the object is already frozen we have no
+            # control over it.
             if (
                 deep_fields := _next_level(include, f)
                 + _next_level(exclude, f)
                 + _next_level(select_related, f)
                 + _next_level(select_properties, f)
             ):
-                raise Exception(f"You cannot control this: {deep_fields}")
-            print(deep_fields)
+                raise FrozenObjectError(
+                    "Invalid FrozenObjectField settings - the field "
+                    f"'{obj.__class__.__name__}.{f}' is already frozen, "
+                    f"but you have specified additional fields: {deep_fields}. "
+                    "You cannot control the serialization of already frozen sub-fields."
+                )
             values[f] = val
         else:
             values[f] = val

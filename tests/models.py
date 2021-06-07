@@ -66,7 +66,7 @@ class DeepNestedModel(models.Model):
     partial = FrozenObjectField(
         "tests.NestedModel",
         encoder=CustomJSONEncoder,
-        include=["frozen__field_int"],
+        include=["fresh__field_int"],
         null=True,
         blank=True,
     )
