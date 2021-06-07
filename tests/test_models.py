@@ -21,7 +21,9 @@ from django.db.models.fields.json import JSONField
 from django.utils.timezone import now as tz_now
 
 from frozen_field.models import FrozenObjectMeta, strip_meta
-from frozen_field.types import AttributeList
+from frozen_field.types import AttributeList, is_dataclass_instance
+
+from .models import FlatModel, NestedModel
 
 TEST_NOW = tz_now()
 
@@ -204,6 +206,12 @@ class TestFrozenObjectMeta:
     def test_to_python__properties(self, input: str, output: object) -> None:
         meta = FrozenObjectMeta(model="tests.FlatModel", properties=["test_property"])
         assert meta.to_python("test_property", input) == output
+
+    def test__set__(self, flat: FlatModel) -> None:
+        """Test the descriptor."""
+        nested = NestedModel()
+        nested.frozen = flat
+        assert dataclasses.is_dataclass(nested.frozen)
 
 
 @pytest.mark.django_db

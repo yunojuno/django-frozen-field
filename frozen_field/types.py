@@ -30,15 +30,14 @@ def klass_str(klass: object) -> ModelClassPath:
     return f"{klass.__class__.__module__}.{klass.__class__.__qualname__}"
 
 
-def is_dataclass_instance(obj: object, cls_name: str) -> bool:
+def is_dataclass_instance(obj: object, cls_name: str | None = None) -> bool:
     """
     Return True if obj is a dataclass - taken from docs.
 
     See https://docs.python.org/3/library/dataclasses.html#dataclasses.is_dataclass
 
     """
-    return (
-        dataclasses.is_dataclass(obj)
-        and not isinstance(obj, type)
-        and obj.__class__.__name__ == cls_name
-    )
+    is_instance = dataclasses.is_dataclass(obj) and not isinstance(obj, type)
+    if cls_name:
+        return is_instance and obj.__class__.__name__ == cls_name
+    return is_instance

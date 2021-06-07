@@ -19,6 +19,26 @@ from .types import (
 
 logger = logging.getLogger(__name__)
 
+class FrozenObjectFieldDescriptor:
+    """Descriptor used to marshall the model<>dataclass transition."""
+
+    def __init__(self, field):
+        self.field = field
+
+    def __set__(self, instance, value):
+        if value is None:
+            return value
+        if isinstance(value, models.Model):
+            value = freeze_object(
+                value,
+                include=self.field.include,
+                exclude=self.field.exclude,
+                select_related=self.field.select_related,
+                select_properties=self.field.select_properties,
+            )
+        if not is_dataclass_instance(value):
+            raise ValueError("value must be a Model or dataclass")
+        instance.__dict__[self.field.name] = value
 
 class FrozenObjectField(models.JSONField):
     """Store snapshot of a model instance in a JSONField."""
@@ -91,6 +111,10 @@ class FrozenObjectField(models.JSONField):
         """Return Model type - it may have been set as a str."""
         return apps.get_model(*self.model_label.split("."))
 
+    def contribute_to_class(self, cls, name):
+        super().contribute_to_class(cls, name)
+        setattr(cls, self.name, FrozenObjectFieldDescriptor(self))
+
     def deconstruct(self) -> DeconstructTuple:
         name, path, args, kwargs = super().deconstruct()
         if kwargs["encoder"] == DjangoJSONEncoder:
@@ -142,13 +166,13 @@ class FrozenObjectField(models.JSONField):
         if is_dataclass_instance(obj, self.frozen_model_name):
             logger.debug("--> field value is already frozen")
             return obj
-        if isinstance(obj, self.model_klass):
-            logger.debug("--> freezing field value: '%r'", obj)
-            return freeze_object(
-                obj,
-                include=self.include,
-                exclude=self.exclude,
-                select_related=self.select_related,
-                select_properties=self.select_properties,
-            )
-        raise ValueError(f"model_instance '{self.attname}' value is invalid.")
+        # if isinstance(obj, self.model_klass):
+        #     logger.debug("--> freezing field value: '%r'", obj)
+        #     return freeze_object(
+        #         obj,
+        #         include=self.include,
+        #         exclude=self.exclude,
+        #         select_related=self.select_related,
+        #         select_properties=self.select_properties,
+        #     )
+        raise ValueError(f"model_instance '{self.attname}' value is invalid: {obj}")
