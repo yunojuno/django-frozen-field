@@ -5,8 +5,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
+import freezegun
 import pytest
 import pytz
+from django.utils.timezone import now as tz_now
 
 from frozen_field.serializers import (
     freeze_object,
@@ -96,18 +98,54 @@ class TestSerialization:
         deep_nested.save()
         deep_nested.refresh_from_db()
 
-    def test_attr_chaining(self, deep: DeepNestedModel) -> None:
+    @freezegun.freeze_time()
+    def test_obj_builder(self) -> None:
         """Test deep serialization of partial fields."""
+        now = tz_now()
+        flat = FlatModel()
+        nested = NestedModel()
+        nested.frozen = flat
+        assert is_dataclass_instance(nested.frozen)
+        assert nested.frozen.meta.model == "tests.FlatModel"
+        assert nested.frozen.is_bool is True
+        assert nested.frozen.today == now.date()
+        nested.save()
+        assert is_dataclass_instance(nested.frozen)
+        assert nested.frozen.meta.model == "tests.FlatModel"
+        assert nested.frozen.is_bool is True
+        assert nested.frozen.today == now.date()
+        nested.refresh_from_db()
+        assert is_dataclass_instance(nested.frozen)
+        assert nested.frozen.meta.model == "tests.FlatModel"
+        assert nested.frozen.is_bool is True
+        assert nested.frozen.today == now.date()
+
+        deep = DeepNestedModel()
+        deep.fresh = nested
+        deep.frozen = nested
+        deep.partial = nested
+        assert is_dataclass_instance(deep.fresh.frozen)
+        assert is_dataclass_instance(deep.frozen)
+        assert is_dataclass_instance(deep.frozen.frozen)
+        assert deep.frozen.fresh is None
+        assert is_dataclass_instance(deep.partial)
+        assert deep.partial.fresh is None
+
+        deep.save()
+        assert is_dataclass_instance(deep.fresh.frozen)
+        assert is_dataclass_instance(deep.frozen)
+        assert is_dataclass_instance(deep.frozen.frozen)
+        assert deep.frozen.fresh is None
+        assert is_dataclass_instance(deep.partial)
+        assert deep.partial.fresh is None
+
         deep.refresh_from_db()
-        print("=======\ndeep\n-------\n", deep)
-        print("=======\ndeep.fresh\n-------\n", deep.fresh)
-        print("=======\ndeep.fresh.fresh\n-------\n", deep.fresh.fresh)
-        print("=======\ndeep.fresh.frozen\n-------\n", deep.fresh.frozen)
-        print("=======\ndeep.frozen\n-------\n", deep.frozen)
-        print("=======\ndeep.frozen.fresh\n-------\n", deep.frozen.fresh)
-        print("=======\ndeep.frozen.frozen\n-------\n", deep.frozen.frozen)
-        print("=======\ndeep.partial\n-------\n", deep.partial)
-        print("=======\ndeep.partial.fresh\n-------\n", deep.partial.fresh)
+        assert is_dataclass_instance(deep.fresh.frozen)
+        assert is_dataclass_instance(deep.frozen)
+        assert is_dataclass_instance(deep.frozen.frozen)
+        assert deep.frozen.fresh is None
+        assert is_dataclass_instance(deep.partial)
+        assert deep.partial.fresh is None
 
 
 @pytest.mark.parametrize(
