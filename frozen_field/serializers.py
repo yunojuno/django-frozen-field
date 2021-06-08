@@ -96,18 +96,18 @@ def freeze_object(
     )
 
     values = {}
-    print(f"frozen_attrs: {meta.frozen_attrs}")
+    # print(f"frozen_attrs: {meta.frozen_attrs}")
     for f in meta.frozen_attrs:
-        print(f" checking field: {f}")
+        # print(f" checking field: {f}")
         val = getattr(obj, f)
         if isinstance(val, models.Model):
             # ok - we're going again, but before we do we need to strip
             # off the current field prefix from all values in the AttributeLists
-            print(f" freezing field: {f}={val}")
-            print(f" include = {_next_level(include, f)}")
-            print(f" exclude = {_next_level(exclude, f)}")
-            print(f" related = {_next_level(select_related, f)}")
-            print(f" properties = {_next_level(select_properties, f)}")
+            # print(f" freezing field: {f}={val}")
+            # print(f" include = {_next_level(include, f)}")
+            # print(f" exclude = {_next_level(exclude, f)}")
+            # print(f" related = {_next_level(select_related, f)}")
+            # print(f" properties = {_next_level(select_properties, f)}")
             frozen_obj = freeze_object(
                 val,
                 _next_level(include, f),
@@ -121,7 +121,11 @@ def freeze_object(
             # specific fields to be controlled in this object then we
             # fail hard - if the object is already frozen we have no
             # control over it.
-            print(f" ignoring frozen field: {f}")
+            # print(f" ignoring frozen field: '{meta.model}.{f}'")
+            # print(f"_next_include: {_next_level(include, f)}")
+            # print(f"_next_exclude: {_next_level(exclude, f)}")
+            # print(f"_next_related: {_next_level(select_related, f)}")
+            # print(f"_next_properties: {_next_level(select_properties, f)}")
             if (
                 deep_fields := _next_level(include, f)
                 + _next_level(exclude, f)

@@ -52,18 +52,19 @@ class FrozenObjectDescriptor:
         self, instance: models.Model, value: models.Model | FrozenModel | None
     ) -> None:
         if value is None:
-            return value
-        if isinstance(value, models.Model):
-            value = freeze_object(
+            instance.__dict__[self.field.name] = value
+        elif is_dataclass_instance(value):
+            instance.__dict__[self.field.name] = value
+        elif isinstance(value, models.Model):
+            instance.__dict__[self.field.name] = freeze_object(
                 value,
                 include=self.field.include,
                 exclude=self.field.exclude,
                 select_related=self.field.select_related,
                 select_properties=self.field.select_properties,
             )
-        if not is_dataclass_instance(value):
+        else:
             raise ValueError("'value' arg must be a Model or dataclass")
-        instance.__dict__[self.field.name] = value
 
 
 class FrozenObjectField(models.JSONField):
