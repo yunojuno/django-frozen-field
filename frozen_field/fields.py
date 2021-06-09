@@ -51,7 +51,6 @@ class FrozenObjectDescriptor:
     def __set__(
         self, instance: models.Model, value: models.Model | FrozenModel | None
     ) -> None:
-        # print(f"setting field value '{instance.__class__.__name__}.{self.field}'")
         if value is None:
             instance.__dict__[self.field.name] = value
         elif is_dataclass_instance(value):
