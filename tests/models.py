@@ -1,3 +1,4 @@
+import uuid
 from datetime import date, datetime
 
 from django.core.serializers.json import DjangoJSONEncoder
@@ -17,14 +18,14 @@ def to_date(value: str) -> date:
 
 class FlatModel(models.Model):
 
-    field_int = models.IntegerField()
-    field_str = models.TextField()
-    field_bool = models.BooleanField()
-    field_date = models.DateField()
-    field_datetime = models.DateTimeField()
-    field_decimal = models.DecimalField(decimal_places=3, max_digits=8)
-    field_float = models.FloatField()
-    field_uuid = models.UUIDField()
+    field_int = models.IntegerField(default=999)
+    field_str = models.TextField(default="Hello, world!")
+    field_bool = models.BooleanField(default=False)
+    field_date = models.DateField(auto_now_add=True)
+    field_datetime = models.DateTimeField(auto_now_add=True)
+    field_decimal = models.DecimalField(default="3.14", decimal_places=3, max_digits=8)
+    field_float = models.FloatField(default=float("3.14"))
+    field_uuid = models.UUIDField(default=uuid.uuid4)
     field_json = models.JSONField(null=True)
 
     @property
@@ -66,7 +67,8 @@ class DeepNestedModel(models.Model):
     partial = FrozenObjectField(
         "tests.NestedModel",
         encoder=CustomJSONEncoder,
-        include=["frozen__field_int"],
+        include=["fresh__field_int"],
+        select_properties=["fresh__today"],
         null=True,
         blank=True,
     )

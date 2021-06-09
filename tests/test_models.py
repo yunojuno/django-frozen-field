@@ -21,7 +21,9 @@ from django.db.models.fields.json import JSONField
 from django.utils.timezone import now as tz_now
 
 from frozen_field.models import FrozenObjectMeta, strip_meta
-from frozen_field.types import AttributeList
+from frozen_field.types import AttributeList, is_dataclass_instance
+
+from .models import FlatModel, NestedModel
 
 TEST_NOW = tz_now()
 
@@ -44,9 +46,9 @@ class TestFrozenObjectMeta:
         [
             ({}, [], []),
             ({"foo": 1}, [], ["foo"]),
-            ({"foo": 1}, ["bar"], ["foo", "bar"]),
+            ({"foo": 1}, ["bar"], ["bar", "foo"]),
             ({}, ["bar"], ["bar"]),
-            ({"foo": 1, "bar": False}, [], ["foo", "bar"]),
+            ({"foo": 1, "bar": False}, [], ["bar", "foo"]),
         ],
     )
     def test_frozen_attrs(
@@ -117,7 +119,7 @@ class TestFrozenObjectMeta:
             frozen_at=tz_now(),
         )
         klass = meta.make_dataclass()
-        assert [f.name for f in dataclasses.fields(klass)] == ["meta", "field_int"]
+        assert [f.name for f in dataclasses.fields(klass)] == ["_meta", "field_int"]
         obj1 = klass(meta, 999)
         assert obj1.json_data() == {"field_int": 999}
         assert obj1.__module__ == "frozen_field.models"
@@ -205,11 +207,17 @@ class TestFrozenObjectMeta:
         meta = FrozenObjectMeta(model="tests.FlatModel", properties=["test_property"])
         assert meta.to_python("test_property", input) == output
 
+    def test__set__(self, flat: FlatModel) -> None:
+        """Test the descriptor."""
+        nested = NestedModel()
+        nested.frozen = flat
+        assert is_dataclass_instance(nested.frozen, "FrozenFlatModel")
+
 
 @pytest.mark.django_db
 def test_strip_meta(deep: dict) -> None:
     deep = {
-        "meta": {
+        "_meta": {
             "model": "tests.NestedModel",
             "fields": {
                 "id": "django.db.models.fields.AutoField",
@@ -221,7 +229,7 @@ def test_strip_meta(deep: dict) -> None:
         },
         "id": 1,
         "frozen": {
-            "meta": {
+            "_meta": {
                 "model": "tests.FlatModel",
                 "fields": {
                     "id": "django.db.models.fields.AutoField",
@@ -232,7 +240,7 @@ def test_strip_meta(deep: dict) -> None:
             "id": 1,
         },
         "fresh": {
-            "meta": {
+            "_meta": {
                 "model": "tests.FlatModel",
                 "fields": {
                     "id": "django.db.models.fields.AutoField",

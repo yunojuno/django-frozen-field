@@ -20,6 +20,53 @@ from .types import (
 logger = logging.getLogger(__name__)
 
 
+class FrozenObjectDescriptor:
+    """
+    Descriptor used to marshall the model<>dataclass transition.
+
+    This descriptor is patched into the field using the contribute_to_class
+    method. It's role is to ensure that models are frozen as soon as the field
+    is set, so that the field itself only has to worry about dataclass<>JSON
+    transitions.
+
+        >>> book = Book.objects.last()
+        >>> obj.frozen = book
+        >>> type(obj.frozen)
+        FrozenBook
+
+    """
+
+    def __init__(self, field: models.Field) -> None:
+        self.field = field
+
+    # See https://stackoverflow.com/a/2350728/45698
+    def __get__(
+        self, instance: models.Model, owner: object = None
+    ) -> FrozenModel | None:
+        if instance is None:
+            raise AttributeError("Can only be accessed via an instance.")
+        return instance.__dict__.get(self.field.name, None)
+
+    # See https://stackoverflow.com/a/2350728/45698
+    def __set__(
+        self, instance: models.Model, value: models.Model | FrozenModel | None
+    ) -> None:
+        if value is None:
+            instance.__dict__[self.field.name] = value
+        elif is_dataclass_instance(value):
+            instance.__dict__[self.field.name] = value
+        elif isinstance(value, models.Model):
+            instance.__dict__[self.field.name] = freeze_object(
+                value,
+                include=self.field.include,
+                exclude=self.field.exclude,
+                select_related=self.field.select_related,
+                select_properties=self.field.select_properties,
+            )
+        else:
+            raise ValueError("'value' arg must be a Model or dataclass")
+
+
 class FrozenObjectField(models.JSONField):
     """Store snapshot of a model instance in a JSONField."""
 
@@ -91,6 +138,11 @@ class FrozenObjectField(models.JSONField):
         """Return Model type - it may have been set as a str."""
         return apps.get_model(*self.model_label.split("."))
 
+    def contribute_to_class(self, cls: models.Model, name: str) -> None:
+        """Add FrozenObjectDescriptor to handle field setting."""
+        super().contribute_to_class(cls, name)
+        setattr(cls, self.name, FrozenObjectDescriptor(self))
+
     def deconstruct(self) -> DeconstructTuple:
         name, path, args, kwargs = super().deconstruct()
         if kwargs["encoder"] == DjangoJSONEncoder:
@@ -108,8 +160,8 @@ class FrozenObjectField(models.JSONField):
     ) -> FrozenModel | None:
         """Deserialize db contents (json) back into original frozen dataclass."""
         logger.debug("--> Deserializing frozen object from '%s'", value)
-        if value is None:
-            return value
+        if not value:
+            return None
         # use JSONField to convert from string to a dict
         if obj := super().from_db_value(value, expression, connection):
             return unfreeze_object(obj, self.converters)
@@ -122,33 +174,3 @@ class FrozenObjectField(models.JSONField):
             return value
         # use JSONField to convert dict to string
         return super().get_prep_value(dataclasses.asdict(value))
-
-    def pre_save(self, model_instance: models.Model, add: bool) -> FrozenModel | None:
-        """
-        Convert Django model to a frozen dataclass before saving it.
-
-        The model_instance argument is the model to which we have attached the field,
-        and so before saving we need to extract the value of the field itself using
-        the `attname` property.
-
-        If the value of the field is a model of the expected type, we freeze it. If it
-        is already frozen, we just pass it back again.
-
-        """
-        logger.debug("--> FrozenObjectField.pre_save: '%r'", model_instance)
-        if (obj := getattr(model_instance, self.attname)) is None:
-            logger.debug("--> field value is empty")
-            return obj
-        if is_dataclass_instance(obj, self.frozen_model_name):
-            logger.debug("--> field value is already frozen")
-            return obj
-        if isinstance(obj, self.model_klass):
-            logger.debug("--> freezing field value: '%r'", obj)
-            return freeze_object(
-                obj,
-                include=self.include,
-                exclude=self.exclude,
-                select_related=self.select_related,
-                select_properties=self.select_properties,
-            )
-        raise ValueError(f"model_instance '{self.attname}' value is invalid.")

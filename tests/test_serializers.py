@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import pickle
+import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
+from unittest import mock
 from uuid import UUID
 
+import freezegun
 import pytest
 import pytz
 
@@ -26,7 +30,7 @@ def to_date(value: str) -> date:
 
 
 TEST_DATA = {
-    "meta": {
+    "_meta": {
         "model": "tests.FlatModel",
         "fields": {
             "id": "django.db.models.fields.AutoField",
@@ -72,7 +76,7 @@ class TestSerialization:
     def test_deserialization(self, nested: NestedModel) -> None:
         # object has been saved, but not refreshed - so still a Model
         assert isinstance(nested.fresh, FlatModel)
-        assert isinstance(nested.frozen, FlatModel)
+        assert is_dataclass_instance(nested.frozen, "FrozenFlatModel")
         nested.save()
         nested.refresh_from_db()
         assert isinstance(nested.fresh, FlatModel)
@@ -96,10 +100,70 @@ class TestSerialization:
         deep_nested.save()
         deep_nested.refresh_from_db()
 
-    def test_attr_chaining(self, deep: DeepNestedModel) -> None:
-        """Test deep serialization of partial fields."""
-        deep.refresh_from_db()
-        assert deep.partial.frozen.json_data() == {"field_int": 999}
+
+@pytest.mark.django_db
+@freezegun.freeze_time()
+@mock.patch("frozen_field.fields.freeze_object")
+def test_deep_freeze(mock_freeze: mock.Mock) -> None:
+    """
+    Test deep serialization of partial fields.
+
+    This test mocks out the actual freezing so that we can follow
+    the exact chain of calls.
+
+    """
+    # now = tz_now()
+    flat = FlatModel()
+    _ = NestedModel(frozen=flat)
+    assert mock_freeze.call_count == 1
+
+    mock_freeze.reset_mock()
+    _ = NestedModel(fresh=flat)
+    assert mock_freeze.call_count == 0
+
+    mock_freeze.reset_mock()
+    _ = NestedModel(fresh=flat, frozen=flat)
+    assert mock_freeze.call_count == 1
+
+    mock_freeze.reset_mock()
+    _ = DeepNestedModel(fresh=NestedModel())
+    assert mock_freeze.call_count == 0
+
+    mock_freeze.reset_mock()
+    _ = DeepNestedModel(fresh=NestedModel(frozen=flat))
+    assert mock_freeze.call_count == 1
+
+    mock_freeze.reset_mock()
+    _ = DeepNestedModel(frozen=NestedModel())
+    assert mock_freeze.call_count == 1
+
+    # freeze deep.frozen.frozen, and deep.frozen
+    mock_freeze.reset_mock()
+    deep = DeepNestedModel(frozen=NestedModel(frozen=flat))
+    assert mock_freeze.call_count == 2
+    assert isinstance(mock_freeze.call_args_list[0][0][0], FlatModel)
+    assert isinstance(mock_freeze.call_args_list[1][0][0], NestedModel)
+
+    # nothing to freeze - partial and frozen attrs are empty
+    mock_freeze.reset_mock()
+    deep = DeepNestedModel(fresh=NestedModel())
+    assert mock_freeze.call_count == 0
+    assert deep.fresh.fresh is None
+    assert deep.fresh.frozen is None
+    assert deep.frozen is None
+    assert deep.partial is None  # type:ignore [unreachable]
+
+    mock_freeze.reset_mock()
+    deep.frozen = NestedModel()
+    assert mock_freeze.call_count == 1
+    deep.partial == deep.frozen
+    assert mock_freeze.call_count == 1
+
+    mock_freeze.reset_mock()
+    deep.frozen = NestedModel()
+    assert mock_freeze.call_count == 1
+    deep.partial == deep.frozen
+    assert mock_freeze.call_count == 1
 
 
 @pytest.mark.parametrize(
@@ -144,6 +208,7 @@ def test_split_list(input: AttributeList, output: AttributeList) -> None:
         ([], ["id"], ["fresh"], ["frozen", "fresh"]),
         (["id"], [], ["fresh"], ["id", "fresh"]),
         ([], [], ["fresh"], ["id", "frozen", "fresh"]),
+        (["fresh__id"], [], [], ["fresh"]),
     ],
 )
 def test_gather_fields(
@@ -164,42 +229,88 @@ class TestFreezeObject:
         assert freeze_object(None) is None
 
     def test_freeze_object(self, flat: FlatModel) -> None:
-        frozen_obj = freeze_object(flat)
+        frozen_obj: Any = freeze_object(flat)
         assert frozen_obj is not None
         assert is_dataclass_instance(frozen_obj, "FrozenFlatModel")
-        for f in frozen_obj.meta.frozen_attrs:  # type:ignore [attr-defined]
+        for f in frozen_obj._meta.frozen_attrs:
             assert getattr(flat, f) == getattr(frozen_obj, f)
         assert isinstance(flat.today, date)
 
     def test_unfreeze_object(self) -> None:
         assert unfreeze_object(None) is None
-        obj = unfreeze_object(TEST_DATA.copy())
+        obj: Any = unfreeze_object(TEST_DATA.copy())
         assert obj is not None
         assert is_dataclass_instance(obj, "FrozenFlatModel")
-        assert obj.id == 1  # type:ignore [attr-defined]
-        assert obj.field_int == 999  # type:ignore [attr-defined]
-        assert obj.field_str == "This is some text"  # type:ignore [attr-defined]
-        assert obj.field_bool is True  # type:ignore [attr-defined]
-        assert obj.field_date == date(2021, 6, 4)  # type:ignore [attr-defined]
-        assert obj.field_datetime == datetime(  # type:ignore [attr-defined]
+        assert obj.id == 1
+        assert obj.field_int == 999
+        assert obj.field_str == "This is some text"
+        assert obj.field_bool is True
+        assert obj.field_date == date(2021, 6, 4)
+        assert obj.field_datetime == datetime(
             2021, 6, 4, 18, 10, 30, 548000, tzinfo=pytz.UTC
         )
-        assert obj.field_decimal == Decimal("3.142")  # type:ignore [attr-defined]
-        assert obj.field_float == float(1)  # type:ignore [attr-defined]
-        assert obj.field_uuid == UUID(  # type:ignore [attr-defined]
-            "6f09460c-c82b-4c8f-9d94-8828402da52e"
-        )
-        assert obj.field_json == {"foo": "bar"}  # type:ignore [attr-defined]
-        assert obj.is_bool is True  # type:ignore [attr-defined]
-        assert obj.today == "2021-06-01"  # type:ignore [attr-defined]
+        assert obj.field_decimal == Decimal("3.142")
+        assert obj.field_float == float(1)
+        assert obj.field_uuid == UUID("6f09460c-c82b-4c8f-9d94-8828402da52e")
+        assert obj.field_json == {"foo": "bar"}
+        assert obj.is_bool is True
+        assert obj.today == "2021-06-01"
 
     def test_unfreeze_object__converters(self) -> None:
         # default unfreeze returns 'today' as a string - as it has no associated field
-        obj = unfreeze_object(TEST_DATA.copy())
-        assert obj.today == "2021-06-01"  # type:ignore [attr-defined]
+        obj: Any = unfreeze_object(TEST_DATA.copy())
+        assert obj.today == "2021-06-01"
         # passing in a converter gets around this
         obj = unfreeze_object(TEST_DATA.copy(), {"today": to_date})
-        assert obj.today == date(2021, 6, 1)  # type:ignore [attr-defined]
+        assert obj.today == date(2021, 6, 1)
+
+    def test_real_example(self) -> None:
+        """Test deep unfreeze."""
+        test_uuid = uuid.uuid4().hex
+        data = {
+            "_meta": {
+                "model": "test.Foo",
+                "fields": {
+                    "uuid": "django.db.models.fields.UUIDField",
+                    "bar": "django.db.models.fields.related.ForeignKey",
+                    "empty": "django.db.models.fields.related.ForeignKey",
+                },
+                "frozen_at": "2021-06-09T09:08:30.736Z",
+            },
+            "uuid": test_uuid,
+            "empty": None,
+            "bar": {
+                "_meta": {
+                    "model": "test.Bar",
+                    "fields": {
+                        "uuid": "django.db.models.fields.UUIDField",
+                        "baz": "django.db.models.fields.related.ForeignKey",
+                    },
+                    "frozen_at": "2021-06-09T09:08:30.773Z",
+                    "properties": [],
+                },
+                "uuid": test_uuid,
+                "baz": {
+                    "_meta": {
+                        "model": "test.Baz",
+                        "fields": {
+                            "uuid": "django.db.models.fields.UUIDField",
+                        },
+                        "frozen_at": "2021-06-09T09:08:30.773Z",
+                        "properties": [],
+                    },
+                    "uuid": test_uuid,
+                },
+            },
+        }
+        original_data = data.copy()
+        obj: Any = unfreeze_object(data)
+        assert data == original_data
+        assert obj.empty is None
+        assert obj._meta.model == "test.Foo"
+        assert obj.bar._meta.model == "test.Bar"
+        assert obj.bar.baz._meta.model == "test.Baz"
+        assert obj.uuid == obj.bar.uuid == obj.bar.baz.uuid == UUID(test_uuid)
 
 
 @pytest.mark.django_db
