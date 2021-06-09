@@ -30,7 +30,7 @@ def to_date(value: str) -> date:
 
 
 TEST_DATA = {
-    "meta": {
+    "_meta": {
         "model": "tests.FlatModel",
         "fields": {
             "id": "django.db.models.fields.AutoField",
@@ -232,7 +232,7 @@ class TestFreezeObject:
         frozen_obj: Any = freeze_object(flat)
         assert frozen_obj is not None
         assert is_dataclass_instance(frozen_obj, "FrozenFlatModel")
-        for f in frozen_obj.meta.frozen_attrs:
+        for f in frozen_obj._meta.frozen_attrs:
             assert getattr(flat, f) == getattr(frozen_obj, f)
         assert isinstance(flat.today, date)
 
@@ -268,7 +268,7 @@ class TestFreezeObject:
         """Test deep unfreeze."""
         test_uuid = uuid.uuid4().hex
         data = {
-            "meta": {
+            "_meta": {
                 "model": "test.Foo",
                 "fields": {
                     "uuid": "django.db.models.fields.UUIDField",
@@ -280,7 +280,7 @@ class TestFreezeObject:
             "uuid": test_uuid,
             "empty": None,
             "bar": {
-                "meta": {
+                "_meta": {
                     "model": "test.Bar",
                     "fields": {
                         "uuid": "django.db.models.fields.UUIDField",
@@ -291,7 +291,7 @@ class TestFreezeObject:
                 },
                 "uuid": test_uuid,
                 "baz": {
-                    "meta": {
+                    "_meta": {
                         "model": "test.Baz",
                         "fields": {
                             "uuid": "django.db.models.fields.UUIDField",
@@ -307,9 +307,9 @@ class TestFreezeObject:
         obj: Any = unfreeze_object(data)
         assert data == original_data
         assert obj.empty is None
-        assert obj.meta.model == "test.Foo"
-        assert obj.bar.meta.model == "test.Bar"
-        assert obj.bar.baz.meta.model == "test.Baz"
+        assert obj._meta.model == "test.Foo"
+        assert obj.bar._meta.model == "test.Bar"
+        assert obj.bar.baz._meta.model == "test.Baz"
         assert obj.uuid == obj.bar.uuid == obj.bar.baz.uuid == UUID(test_uuid)
 
 

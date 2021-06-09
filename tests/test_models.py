@@ -119,7 +119,7 @@ class TestFrozenObjectMeta:
             frozen_at=tz_now(),
         )
         klass = meta.make_dataclass()
-        assert [f.name for f in dataclasses.fields(klass)] == ["meta", "field_int"]
+        assert [f.name for f in dataclasses.fields(klass)] == ["_meta", "field_int"]
         obj1 = klass(meta, 999)
         assert obj1.json_data() == {"field_int": 999}
         assert obj1.__module__ == "frozen_field.models"
@@ -217,7 +217,7 @@ class TestFrozenObjectMeta:
 @pytest.mark.django_db
 def test_strip_meta(deep: dict) -> None:
     deep = {
-        "meta": {
+        "_meta": {
             "model": "tests.NestedModel",
             "fields": {
                 "id": "django.db.models.fields.AutoField",
@@ -229,7 +229,7 @@ def test_strip_meta(deep: dict) -> None:
         },
         "id": 1,
         "frozen": {
-            "meta": {
+            "_meta": {
                 "model": "tests.FlatModel",
                 "fields": {
                     "id": "django.db.models.fields.AutoField",
@@ -240,7 +240,7 @@ def test_strip_meta(deep: dict) -> None:
             "id": 1,
         },
         "fresh": {
-            "meta": {
+            "_meta": {
                 "model": "tests.FlatModel",
                 "fields": {
                     "id": "django.db.models.fields.AutoField",

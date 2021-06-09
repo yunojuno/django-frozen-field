@@ -108,7 +108,7 @@ class TestFrozenObjectField:
     def test_from_db_value(self, mock_unfreeze: mock.Mock, flat: FlatModel) -> None:
         field = FrozenObjectField(FlatModel)
         assert (
-            field.from_db_value('{"meta": {}}', None, None)
+            field.from_db_value('{"_meta": {}}', None, None)
             == mock_unfreeze.return_value
         )
 

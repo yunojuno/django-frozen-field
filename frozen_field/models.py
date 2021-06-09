@@ -54,10 +54,10 @@ def _reduce(obj: FrozenModel) -> PickleReducer:
 
 
 def strip_meta(value: dict) -> dict:
-    """Strip the "meta" node from dict, recursively."""
+    """Strip the "_meta" node from dict, recursively."""
     result = {}
     for k, v in value.items():
-        if k == "meta":
+        if k == "_meta":
             continue
         if isinstance(v, dict):
             result[k] = strip_meta(v)
@@ -140,14 +140,14 @@ class FrozenObjectMeta:
         """Create dynamic dataclass from the meta info."""
         klass = dataclasses.make_dataclass(
             cls_name=self.cls_name,
-            fields=["meta"] + self.frozen_attrs,
+            fields=["_meta"] + self.frozen_attrs,
             frozen=True,
             namespace={
                 # used to support pickling - see _reduce docstring
                 "__reduce__": _reduce,
                 # consider two objs equal if all properties match
                 "__eq__": lambda obj1, obj2: vars(obj1) == vars(obj2),
-                # 'clean' dict by removing "meta" nodes - just the attrs
+                # 'clean' dict by removing "_meta" nodes - just the attrs
                 "json_data": lambda obj: strip_meta(dataclasses.asdict(obj)),
             },
         )

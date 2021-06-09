@@ -123,7 +123,7 @@ types.FrozenAddress
 datetime.date(2011, 6, 4)
 >>> dataclasses.asdict(profile.address)
 {
-    "meta": {
+    "_meta": {
         "pk": 1,
         "model": "Address",
         "frozen_at": "2021-06-04T18:10:30.549Z",

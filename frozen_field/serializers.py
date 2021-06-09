@@ -141,7 +141,7 @@ def unfreeze_object(
     if not frozen_object:
         return None
     data = frozen_object.copy()
-    meta = FrozenObjectMeta(**data.pop("meta"))
+    meta = FrozenObjectMeta(**data.pop("_meta"))
     values: dict[str, object] = {}
     field_converters = field_converters or {}
     for k, v in data.items():
