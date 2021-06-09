@@ -39,29 +39,38 @@ class FrozenObjectDescriptor:
     def __init__(self, field: models.Field) -> None:
         self.field = field
 
+    def _get(self, instance: models.Model) -> FrozenModel | None:
+        return instance.__dict__.get(self.field.name, None)
+
+    def _set(self, instance: models.Model, value: FrozenModel | None) -> None:
+        instance.__dict__[self.field.name] = value
+
     # See https://stackoverflow.com/a/2350728/45698
     def __get__(
         self, instance: models.Model, owner: object = None
     ) -> FrozenModel | None:
         if instance is None:
             raise AttributeError("Can only be accessed via an instance.")
-        return instance.__dict__.get(self.field.name, None)
+        return self._get(instance)
 
     # See https://stackoverflow.com/a/2350728/45698
     def __set__(
         self, instance: models.Model, value: models.Model | FrozenModel | None
     ) -> None:
         if value is None:
-            instance.__dict__[self.field.name] = value
+            self._set(instance, value)
         elif is_dataclass_instance(value):
-            instance.__dict__[self.field.name] = value
+            self._set(instance, value)
         elif isinstance(value, models.Model):
-            instance.__dict__[self.field.name] = freeze_object(
-                value,
-                include=self.field.include,
-                exclude=self.field.exclude,
-                select_related=self.field.select_related,
-                select_properties=self.field.select_properties,
+            self._set(
+                instance,
+                freeze_object(
+                    value,
+                    include=self.field.include,
+                    exclude=self.field.exclude,
+                    select_related=self.field.select_related,
+                    select_properties=self.field.select_properties,
+                ),
             )
         else:
             raise ValueError("'value' arg must be a Model or dataclass")
