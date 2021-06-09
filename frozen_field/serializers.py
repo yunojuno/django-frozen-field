@@ -108,12 +108,13 @@ def freeze_object(
                 _next_level(select_related, f),
                 _next_level(select_properties, f),
             )
-            values[f] = dataclasses.asdict(frozen_obj)
+            values[f] = frozen_obj
         elif dataclasses.is_dataclass(val):
             # we have a pre-frozen dataclass. if the user has specified
             # specific fields to be controlled in this object then we
             # fail hard - if the object is already frozen we have no
             # control over it.
+            # TODO: fine-tune the exception to parse out properties that do not exist
             if (
                 deep_fields := _next_level(include, f)
                 + _next_level(exclude, f)
