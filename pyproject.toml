@@ -20,7 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
 ]
-packages = [{ include = "frozen_field" }]
+packages = [{ include = "frozen" }]
 
 [tool.poetry.dependencies]
 python = "^3.9"

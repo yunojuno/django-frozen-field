@@ -20,8 +20,8 @@ from django.db.models.fields import (
 from django.db.models.fields.json import JSONField
 from django.utils.timezone import now as tz_now
 
-from frozen_field.models import FrozenObjectMeta, strip_meta
-from frozen_field.types import AttributeList, is_dataclass_instance
+from frozen.models import FrozenObjectMeta, strip_meta
+from frozen.types import AttributeList, is_dataclass_instance
 
 from .models import FlatModel, NestedModel
 
@@ -63,7 +63,7 @@ class TestFrozenObjectMeta:
             {
                 "fk": "django.db.models.fields.related.ForeignKey",
                 "one2one": "django.db.models.fields.related.OneToOneField",
-                "frozen": "frozen_field.fields.FrozenObjectField",
+                "frozen": "frozen.fields.FrozenObjectField",
                 "str": "django.db.models.fields.CharField",
             },
             ["prop"],
@@ -75,23 +75,23 @@ class TestFrozenObjectMeta:
         assert meta.is_related_field("str") is False
         assert meta.is_related_field("prop") is False
 
-    def test_is_frozen_field(self) -> None:
+    def test_is_frozen(self) -> None:
         meta = FrozenObjectMeta(
             "test.Dummy",
             {
                 "fk": "django.db.models.fields.related.ForeignKey",
                 "one2one": "django.db.models.fields.related.OneToOneField",
-                "frozen": "frozen_field.fields.FrozenObjectField",
+                "frozen": "frozen.fields.FrozenObjectField",
                 "str": "django.db.models.fields.CharField",
             },
             ["prop"],
             tz_now(),
         )
-        assert meta.is_frozen_field("fk") is False
-        assert meta.is_frozen_field("one2one") is False
-        assert meta.is_frozen_field("frozen") is True
-        assert meta.is_frozen_field("str") is False
-        assert meta.is_frozen_field("prop") is False
+        assert meta.is_frozen("fk") is False
+        assert meta.is_frozen("one2one") is False
+        assert meta.is_frozen("frozen") is True
+        assert meta.is_frozen("str") is False
+        assert meta.is_frozen("prop") is False
 
     def test_is_property(self) -> None:
         meta = FrozenObjectMeta(
@@ -99,7 +99,7 @@ class TestFrozenObjectMeta:
             {
                 "fk": "django.db.models.fields.related.ForeignKey",
                 "one2one": "django.db.models.fields.related.OneToOneField",
-                "frozen": "frozen_field.fields.FrozenObjectField",
+                "frozen": "frozen.fields.FrozenObjectField",
                 "str": "django.db.models.fields.CharField",
             },
             ["prop"],
@@ -122,7 +122,7 @@ class TestFrozenObjectMeta:
         assert [f.name for f in dataclasses.fields(klass)] == ["_meta", "field_int"]
         obj1 = klass(meta, 999)
         assert obj1.json_data() == {"field_int": 999}
-        assert obj1.__module__ == "frozen_field.models"
+        assert obj1.__module__ == "frozen.models"
         with pytest.raises(dataclasses.FrozenInstanceError):
             obj1.field_int = 0
 
@@ -221,7 +221,7 @@ def test_strip_meta(deep: dict) -> None:
             "model": "tests.NestedModel",
             "fields": {
                 "id": "django.db.models.fields.AutoField",
-                "frozen": "frozen_field.fields.FrozenObjectField",
+                "frozen": "frozen.fields.FrozenObjectField",
                 "fresh": "django.db.models.fields.related.ForeignKey",
             },
             "properties": [],

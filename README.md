@@ -36,7 +36,7 @@ etc., is painful. This package is designed to make the migration from 'fresh' to
 The package includes three core modules, `serializers`, `models`, and `fields`,
 that together control the serialization process.
 
-#### `frozen_field.models`
+#### `frozen.models`
 
 This module contains the engine of the package, which is a `FrozenObjectMeta`
 dataclass that is responsible for parsing Django model attributes, extracting
@@ -44,7 +44,7 @@ data and and creating the dynamic dataclasses used to represent a Django Model.
 
 You should not need to use this module in your application.
 
-#### `frozen_field.serializers`
+#### `frozen.serializers`
 
 This module contains the `freeze_object` and `unfreeze_object` functions that
 are responsible for marshalling the serialized data between a Django Model
@@ -64,7 +64,7 @@ On subsequent saves:
 
 You should not need to use this module in your application.
 
-#### `frozen_field.fields`
+#### `frozen.fields`
 
 This module contains the `FrozenObjectField` itself - it is the only part of the
 package that should need to use yourself.

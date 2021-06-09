@@ -150,7 +150,7 @@ def unfreeze_object(
         if v is None:
             values[k] = v
         # if we find another frozen object, recurse.
-        if meta.is_related_field(k) or meta.is_frozen_field(k):
+        if meta.is_related_field(k) or meta.is_frozen(k):
             converters = strip_dict(field_converters, k)
             values[k] = unfreeze_object(v, converters)
         elif k in field_converters:

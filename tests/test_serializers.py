@@ -12,14 +12,14 @@ import freezegun
 import pytest
 import pytz
 
-from frozen_field.serializers import (
+from frozen.serializers import (
     freeze_object,
     gather_fields,
     split_list,
     strip_dict,
     unfreeze_object,
 )
-from frozen_field.types import AttributeList, AttributeName, is_dataclass_instance
+from frozen.types import AttributeList, AttributeName, is_dataclass_instance
 
 from .models import DeepNestedModel, FlatModel, NestedModel
 
@@ -103,7 +103,7 @@ class TestSerialization:
 
 @pytest.mark.django_db
 @freezegun.freeze_time()
-@mock.patch("frozen_field.fields.freeze_object")
+@mock.patch("frozen.fields.freeze_object")
 def test_deep_freeze(mock_freeze: mock.Mock) -> None:
     """
     Test deep serialization of partial fields.

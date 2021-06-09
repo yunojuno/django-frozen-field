@@ -125,7 +125,7 @@ class FrozenObjectMeta:
         _, klass = self.fields[field_name].rsplit(".", 1)
         return klass in ["ForeignKey", "OneToOneField"]
 
-    def is_frozen_field(self, field_name: str) -> bool:
+    def is_frozen(self, field_name: str) -> bool:
         """Return True if the fied_name is a FrozenObjectField."""
         if field_name in self.properties:
             return False

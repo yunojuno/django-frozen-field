@@ -21,7 +21,7 @@ INSTALLED_APPS = (
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "frozen_field",
+    "frozen",
     "tests",
 )
 
@@ -68,7 +68,7 @@ LOGGING = {
     },
     "loggers": {
         "": {"handlers": ["console"], "propagate": True, "level": "DEBUG"},
-        "frozen_field": {"handlers": ["console"], "propagate": True, "level": "INFO"},
+        "frozen": {"handlers": ["console"], "propagate": True, "level": "INFO"},
         # 'django': {
         #     'handlers': ['console'],
         #     'propagate': True,

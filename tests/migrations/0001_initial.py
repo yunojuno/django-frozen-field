@@ -3,7 +3,7 @@
 import django.db.models.deletion
 from django.db import migrations, models
 
-import frozen_field.fields
+import frozen.fields
 import tests.models
 
 
@@ -51,7 +51,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "frozen",
-                    frozen_field.fields.FrozenObjectField(
+                    frozen.fields.FrozenObjectField(
                         "tests.FlatModel",
                         blank=True,
                         converters={"today": tests.models.to_date},
@@ -87,7 +87,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "frozen",
-                    frozen_field.fields.FrozenObjectField(
+                    frozen.fields.FrozenObjectField(
                         "tests.NestedModel",
                         blank=True,
                         converters={},
@@ -101,7 +101,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "partial",
-                    frozen_field.fields.FrozenObjectField(
+                    frozen.fields.FrozenObjectField(
                         "tests.NestedModel",
                         blank=True,
                         converters={},
