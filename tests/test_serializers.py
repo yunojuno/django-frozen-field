@@ -15,11 +15,16 @@ import pytz
 from frozen_field.serializers import (
     freeze_object,
     gather_fields,
-    split_list,
+    split_fields,
     strip_dict,
     unfreeze_object,
 )
-from frozen_field.types import AttributeList, AttributeName, is_dataclass_instance
+from frozen_field.types import (
+    AttributeList,
+    AttributeMap,
+    AttributeName,
+    is_dataclass_instance,
+)
 
 from .models import DeepNestedModel, FlatModel, NestedModel
 
@@ -185,19 +190,6 @@ def test_strip_dict(input: dict, field_name: AttributeName, output: dict) -> Non
     assert strip_dict(input, field_name) == output
 
 
-@pytest.mark.parametrize(
-    "input,output",
-    [
-        ([""], []),
-        (["foo"], ["foo"]),
-        (["foo__bar"], ["foo"]),
-        (["foo", "foo__bar", "foo__bar__baz"], ["foo"]),
-    ],
-)
-def test_split_list(input: AttributeList, output: AttributeList) -> None:
-    assert split_list(input) == output
-
-
 @pytest.mark.django_db
 @pytest.mark.parametrize(
     "include,exclude,select_related,result",
@@ -208,7 +200,6 @@ def test_split_list(input: AttributeList, output: AttributeList) -> None:
         ([], ["id"], ["fresh"], ["frozen", "fresh"]),
         (["id"], [], ["fresh"], ["id", "fresh"]),
         ([], [], ["fresh"], ["id", "frozen", "fresh"]),
-        (["fresh__id"], [], [], ["fresh"]),
     ],
 )
 def test_gather_fields(
@@ -319,3 +310,17 @@ def test_pickle_frozen_object(flat: FlatModel) -> None:
     p = pickle.dumps(frozen)
     q = pickle.loads(p)
     assert q == frozen
+
+
+@pytest.mark.parametrize(
+    "input,output",
+    [
+        ([], {}),
+        (["foo"], {"foo": []}),
+        (["foo", "foo__bar"], {"foo": ["bar"]}),
+        (["foo__baz", "foo__bar"], {"foo": ["baz", "bar"]}),
+        (["foo__bar__baz", "foo__bar"], {"foo": ["bar__baz", "bar"]}),
+    ],
+)
+def test_split_fields(input: AttributeList, output: AttributeMap) -> None:
+    assert split_fields(input) == output

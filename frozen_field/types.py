@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Callable
+from collections.abc import Callable
 
 # mypy hints
 
@@ -12,6 +12,7 @@ ModelClassPath = str
 AttributeName = str
 AttributeValue = object
 AttributeList = list[AttributeName]
+AttributeMap = dict[AttributeName, AttributeList]
 IsoTimestamp = str
 # {"date_registered": "django.db.models.fields.DateField"}
 MetaFieldMap = dict[AttributeName, ModelClassPath]

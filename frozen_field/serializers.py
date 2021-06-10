@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+from collections import defaultdict
 
 from django.db import models
 from django.db.models.fields import Field
@@ -10,6 +11,7 @@ from .exceptions import FrozenObjectError
 from .models import FrozenObjectMeta
 from .types import (
     AttributeList,
+    AttributeMap,
     AttributeName,
     FieldConverterMap,
     FrozenModel,
@@ -26,11 +28,6 @@ def strip_dict(values: FieldConverterMap, prefix: AttributeName) -> FieldConvert
     }
 
 
-def split_list(values: AttributeList) -> AttributeList:
-    """Extract just the top-level attributes."""
-    return list(set([f.split("__")[0] for f in values if f]))
-
-
 def gather_fields(
     klass: type[models.Model],
     include: AttributeList | None,
@@ -42,11 +39,11 @@ def gather_fields(
     related_fields = [f for f in klass._meta.local_fields if f.related_model]
 
     if include:
-        _local = [f for f in local_fields if f.name in split_list(include)]
-        _related = [f for f in related_fields if f.name in split_list(include)]
+        _local = [f for f in local_fields if f.name in include]
+        _related = [f for f in related_fields if f.name in include]
     # include and exclude are mutually exclusive
     elif exclude:
-        _local = [f for f in local_fields if f.name not in split_list(exclude)]
+        _local = [f for f in local_fields if f.name not in exclude]
         _related = []
     # default option is all local fields, no related fields
     else:
@@ -54,7 +51,7 @@ def gather_fields(
         _related = []
 
     if select_related:
-        _related += [f for f in related_fields if f.name in split_list(select_related)]
+        _related += [f for f in related_fields if f.name in select_related]
 
     return _local + _related
 
@@ -78,20 +75,21 @@ def freeze_object(
     if obj is None:
         return obj
 
-    def _next_level(values: AttributeList, field_name: str) -> AttributeList:
-        prefix = f"{field_name}__"
-        return list(set([f.split("__", 1)[1] for f in values if f.startswith(prefix)]))
+    _include = split_fields(include)
+    _exclude = split_fields(exclude)
+    _related = split_fields(select_related)
+    _props = split_fields(select_properties)
 
-    include = include or []
-    exclude = exclude or []
-    select_related = select_related or []
-    select_properties = select_properties or []
-
-    fields = gather_fields(obj.__class__, include, exclude, select_related)
+    fields = gather_fields(
+        obj.__class__,
+        list(_include.keys()),
+        list(_exclude.keys()),
+        list(_related.keys()),
+    )
     meta = FrozenObjectMeta(
         model=obj.__class__._meta.label,
         fields={f.name: klass_str(f) for f in fields},
-        properties=split_list(select_properties),
+        properties=list(_props.keys()),
         frozen_at=tz_now(),
     )
 
@@ -103,28 +101,29 @@ def freeze_object(
             # off the current field prefix from all values in the AttributeLists
             frozen_obj = freeze_object(
                 val,
-                _next_level(include, f),
-                _next_level(exclude, f),
-                _next_level(select_related, f),
-                _next_level(select_properties, f),
+                _include.get(f),
+                _exclude.get(f),
+                _related.get(f),
+                _props.get(f),
             )
-            values[f] = dataclasses.asdict(frozen_obj)
+            values[f] = frozen_obj
         elif dataclasses.is_dataclass(val):
             # we have a pre-frozen dataclass. if the user has specified
             # specific fields to be controlled in this object then we
             # fail hard - if the object is already frozen we have no
             # control over it.
-            if (
-                deep_fields := _next_level(include, f)
-                + _next_level(exclude, f)
-                + _next_level(select_related, f)
-                + _next_level(select_properties, f)
+            if any(
+                [
+                    _include.get(f),
+                    _exclude.get(f),
+                    _related.get(f),
+                    _props.get(f),
+                ]
             ):
                 raise FrozenObjectError(
                     "Invalid FrozenObjectField settings - the field "
-                    f"'{obj.__class__.__name__}.{f}' is already frozen, "
-                    f"but you have specified additional fields: {deep_fields}. "
-                    "You cannot control the serialization of already frozen sub-fields."
+                    f"'{obj.__class__.__name__}.{f}' is already frozen. "
+                    "You cannot control the serialization of frozen sub-fields."
                 )
             values[f] = val
         else:
@@ -160,3 +159,25 @@ def unfreeze_object(
             values[k] = meta.to_python(k, v)
     dataklass = meta.make_dataclass()
     return dataklass(meta, **values)
+
+
+def split_fields(fields: AttributeList | None) -> AttributeMap:
+    """
+    Split elements in a list into a dict.
+
+    This function does the ORM style splitting. Given a field name
+    such as "foo__bar", it will create a dict {"foo": ["bar"]} -
+    essentially returning the list of child fields for each top-level
+    field.
+
+    """
+    result: AttributeMap = defaultdict(list)
+    if not fields:
+        return {}
+    for f in fields:
+        split = (f"{f}").split("__", 1)
+        if len(split) == 1 and split[0] not in result:
+            result[split[0]] = []
+        if len(split) == 2:
+            result[split[0]].append(split[1])
+    return dict(result)
