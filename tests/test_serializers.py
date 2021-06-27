@@ -12,6 +12,7 @@ import freezegun
 import pytest
 import pytz
 
+from frozen.exceptions import FrozenObjectError
 from frozen.serializers import (
     freeze_object,
     gather_fields,
@@ -255,6 +256,12 @@ class TestFreezeObject:
         assert obj.field_json == {"foo": "bar"}
         assert obj.is_bool is True
         assert obj.today == "2021-06-01"
+
+    def test_unfreeze_object__no_meta(self) -> None:
+        data = TEST_DATA.copy()
+        del data["_meta"]
+        with pytest.raises(FrozenObjectError):
+            unfreeze_object(data)
 
     def test_unfreeze_object__converters(self) -> None:
         # default unfreeze returns 'today' as a string - as it has no associated field

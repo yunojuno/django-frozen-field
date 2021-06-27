@@ -142,7 +142,10 @@ def unfreeze_object(
     if not frozen_object:
         return None
     data = frozen_object.copy()
-    meta = FrozenObjectMeta(**data.pop("_meta"))
+    try:
+        meta = FrozenObjectMeta(**data.pop("_meta"))
+    except KeyError as ex:
+        raise FrozenObjectError("Invalid frozen object - missing _meta key.") from ex
     values: dict[str, object] = {}
     field_converters = field_converters or {}
     for k, v in data.items():
