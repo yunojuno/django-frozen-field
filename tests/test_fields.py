@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional, Union
 from unittest import mock
 
 import pytest
@@ -84,7 +83,7 @@ class TestFrozenObjectDescriptor:
 @pytest.mark.django_db
 class TestFrozenObjectField:
     @pytest.mark.parametrize("model", ["tests.FlatModel", FlatModel])
-    def test_initialisation(self, model: Union[str, Model]) -> None:
+    def test_initialisation(self, model: str | Model) -> None:
         field = FrozenObjectField(model)
         assert field.model_klass == FlatModel
         assert field.model_name == "FlatModel"
@@ -95,12 +94,12 @@ class TestFrozenObjectField:
         assert field.select_properties == []
 
     @pytest.mark.parametrize("model", [None, 1, True])
-    def test_initialisation__value_error(self, model: Union[str, Model]) -> None:
+    def test_initialisation__value_error(self, model: str | Model) -> None:
         with pytest.raises(ValueError):
             _ = FrozenObjectField(model)
 
     @pytest.mark.parametrize("model", ["tests.FlatModel", FlatModel])
-    def test_model_klass(self, model: Union[str, Model]) -> None:
+    def test_model_klass(self, model: str | Model) -> None:
         field = FrozenObjectField(model)
         assert field.model_klass == FlatModel
 
@@ -126,7 +125,7 @@ class TestFrozenObjectField:
         ],
     )
     def test_get_prep_value(
-        self, value: Optional[FrozenModel], result: Optional[dict]
+        self, value: FrozenModel | None, result: dict | None
     ) -> None:
         field = FrozenObjectField(FlatModel)
         assert field.get_prep_value(value) == result
@@ -140,7 +139,7 @@ class TestFrozenObjectField:
         ],
     )
     def test_from_db_value__empty(
-        self, value: Optional[str], result: Optional[FrozenModel]
+        self, value: str | None, result: FrozenModel | None
     ) -> None:
         field = FrozenObjectField(FlatModel)
         assert field.from_db_value(value, None, None) == result

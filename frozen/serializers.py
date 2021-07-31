@@ -28,7 +28,7 @@ def strip_dict(values: FieldConverterMap, prefix: AttributeName) -> FieldConvert
 
 def split_list(values: AttributeList) -> AttributeList:
     """Extract just the top-level attributes."""
-    return list(set([f.split("__")[0] for f in values if f]))
+    return list({f.split("__")[0] for f in values if f})
 
 
 def gather_fields(
@@ -80,7 +80,7 @@ def freeze_object(
 
     def _next_level(values: AttributeList, field_name: str) -> AttributeList:
         prefix = f"{field_name}__"
-        return list(set([f.split("__", 1)[1] for f in values if f.startswith(prefix)]))
+        return list({f.split("__", 1)[1] for f in values if f.startswith(prefix)})
 
     include = include or []
     exclude = exclude or []
