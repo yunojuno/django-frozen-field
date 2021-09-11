@@ -12,15 +12,15 @@ import freezegun
 import pytest
 import pytz
 
-from frozen.exceptions import FrozenObjectError
-from frozen.serializers import (
+from frozen_field.exceptions import FrozenObjectError
+from frozen_field.serializers import (
     freeze_object,
     gather_fields,
     split_list,
     strip_dict,
     unfreeze_object,
 )
-from frozen.types import AttributeList, AttributeName, is_dataclass_instance
+from frozen_field.types import AttributeList, AttributeName, is_dataclass_instance
 
 from .models import DeepNestedModel, FlatModel, NestedModel
 
@@ -104,7 +104,7 @@ class TestSerialization:
 
 @pytest.mark.django_db
 @freezegun.freeze_time()
-@mock.patch("frozen.fields.freeze_object")
+@mock.patch("frozen_field.fields.freeze_object")
 def test_deep_freeze(mock_freeze: mock.Mock) -> None:
     """
     Test deep serialization of partial fields.
@@ -138,7 +138,7 @@ def test_deep_freeze(mock_freeze: mock.Mock) -> None:
     _ = DeepNestedModel(frozen=NestedModel())
     assert mock_freeze.call_count == 1
 
-    # freeze deep.frozen.frozen, and deep.frozen
+    # freeze deep.frozen_field.frozen, and deep.frozen
     mock_freeze.reset_mock()
     deep = DeepNestedModel(frozen=NestedModel(frozen=flat))
     assert mock_freeze.call_count == 2

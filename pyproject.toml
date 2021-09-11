@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "django-frozen-field"
-version = "0.1.beta13"
+version = "0.1.beta14"
 description = "Django model field used to store snapshot of data."
 license = "MIT"
 authors = ["YunoJuno <code@yunojuno.com>"]
@@ -22,7 +22,7 @@ classifiers = [
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
 ]
-packages = [{ include = "frozen" }]
+packages = [{ include = "frozen_field" }]
 
 [tool.poetry.dependencies]
 python = "^3.9"

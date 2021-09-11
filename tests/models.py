@@ -4,7 +4,7 @@ from datetime import date, datetime
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 
-from frozen.fields import FrozenObjectField
+from frozen_field.fields import FrozenObjectField
 
 
 class CustomJSONEncoder(DjangoJSONEncoder):

@@ -25,7 +25,7 @@ class FrozenObjectDescriptor:
     Descriptor used to marshall the model<>dataclass transition.
 
     This descriptor is patched into the field using the contribute_to_class
-    method. It's role is to ensure that models are frozen as soon as the field
+    method. Its role is to ensure that models are frozen as soon as the field
     is set, so that the field itself only has to worry about dataclass<>JSON
     transitions.
 

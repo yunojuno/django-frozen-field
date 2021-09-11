@@ -20,8 +20,8 @@ from django.db.models.fields import (
 from django.db.models.fields.json import JSONField
 from django.utils.timezone import now as tz_now
 
-from frozen.models import FrozenObjectMeta, strip_meta
-from frozen.types import AttributeList, is_dataclass_instance
+from frozen_field.models import FrozenObjectMeta, strip_meta
+from frozen_field.types import AttributeList, is_dataclass_instance
 
 from .models import FlatModel, NestedModel
 
@@ -63,7 +63,7 @@ class TestFrozenObjectMeta:
             {
                 "fk": "django.db.models.fields.related.ForeignKey",
                 "one2one": "django.db.models.fields.related.OneToOneField",
-                "frozen": "frozen.fields.FrozenObjectField",
+                "frozen": "frozen_field.fields.FrozenObjectField",
                 "str": "django.db.models.fields.CharField",
             },
             ["prop"],
@@ -81,7 +81,7 @@ class TestFrozenObjectMeta:
             {
                 "fk": "django.db.models.fields.related.ForeignKey",
                 "one2one": "django.db.models.fields.related.OneToOneField",
-                "frozen": "frozen.fields.FrozenObjectField",
+                "frozen": "frozen_field.fields.FrozenObjectField",
                 "str": "django.db.models.fields.CharField",
             },
             ["prop"],
@@ -99,7 +99,7 @@ class TestFrozenObjectMeta:
             {
                 "fk": "django.db.models.fields.related.ForeignKey",
                 "one2one": "django.db.models.fields.related.OneToOneField",
-                "frozen": "frozen.fields.FrozenObjectField",
+                "frozen": "frozen_field.fields.FrozenObjectField",
                 "str": "django.db.models.fields.CharField",
             },
             ["prop"],
@@ -122,7 +122,7 @@ class TestFrozenObjectMeta:
         assert [f.name for f in dataclasses.fields(klass)] == ["_meta", "field_int"]
         obj1 = klass(meta, 999)
         assert obj1.json_data() == {"field_int": 999}
-        assert obj1.__module__ == "frozen.models"
+        assert obj1.__module__ == "frozen_field.models"
         with pytest.raises(dataclasses.FrozenInstanceError):
             obj1.field_int = 0
 
@@ -221,7 +221,7 @@ def test_strip_meta(deep: dict) -> None:
             "model": "tests.NestedModel",
             "fields": {
                 "id": "django.db.models.fields.AutoField",
-                "frozen": "frozen.fields.FrozenObjectField",
+                "frozen": "frozen_field.fields.FrozenObjectField",
                 "fresh": "django.db.models.fields.related.ForeignKey",
             },
             "properties": [],

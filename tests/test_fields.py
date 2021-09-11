@@ -5,10 +5,10 @@ from unittest import mock
 import pytest
 from django.db.models import Model, fields
 
-from frozen.fields import FrozenObjectDescriptor, FrozenObjectField
-from frozen.models import FrozenObjectMeta
-from frozen.serializers import freeze_object
-from frozen.types import (
+from frozen_field.fields import FrozenObjectDescriptor, FrozenObjectField
+from frozen_field.models import FrozenObjectMeta
+from frozen_field.serializers import freeze_object
+from frozen_field.types import (
     AttributeList,
     AttributeName,
     FrozenModel,
@@ -103,7 +103,7 @@ class TestFrozenObjectField:
         field = FrozenObjectField(model)
         assert field.model_klass == FlatModel
 
-    @mock.patch("frozen.fields.unfreeze_object")
+    @mock.patch("frozen_field.fields.unfreeze_object")
     def test_from_db_value(self, mock_unfreeze: mock.Mock, flat: FlatModel) -> None:
         field = FrozenObjectField(FlatModel)
         assert (
