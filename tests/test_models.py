@@ -166,8 +166,8 @@ class TestFrozenObjectMeta:
             ("django.db.models.fields.DateField", "2021-06-01", date(2021, 6, 1)),
             (
                 "django.db.models.fields.DateTimeField",
-                "2021-06-01T15:38:44.277Z",
-                datetime(2021, 6, 1, 15, 38, 44, 277000, tzinfo=pytz.UTC),
+                "2021-06-01T15:38:44.277123Z",
+                datetime(2021, 6, 1, 15, 38, 44, 277123, tzinfo=pytz.UTC),
             ),
             (
                 "django.db.models.fields.UUIDField",

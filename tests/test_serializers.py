@@ -53,7 +53,7 @@ TEST_DATA = {
     "field_str": "This is some text",
     "field_bool": True,
     "field_date": "2021-06-04",
-    "field_datetime": "2021-06-04T18:10:30.548Z",
+    "field_datetime": "2021-06-04T18:10:30.548876Z",
     "field_decimal": "3.142",
     "field_float": 1,
     "field_uuid": "6f09460c-c82b-4c8f-9d94-8828402da52e",
@@ -248,7 +248,7 @@ class TestFreezeObject:
         assert obj.field_bool is True
         assert obj.field_date == date(2021, 6, 4)
         assert obj.field_datetime == datetime(
-            2021, 6, 4, 18, 10, 30, 548000, tzinfo=pytz.UTC
+            2021, 6, 4, 18, 10, 30, 548876, tzinfo=pytz.UTC
         )
         assert obj.field_decimal == Decimal("3.142")
         assert obj.field_float == float(1)

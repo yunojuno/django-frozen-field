@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+from datetime import datetime
 
 from django.apps import apps
 from django.core.serializers.json import DjangoJSONEncoder
@@ -18,6 +19,25 @@ from .types import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class FrozenJSONEncoder(DjangoJSONEncoder):
+    """
+    Subclass of DjangoJSONEncoder that preserves milliseconds.
+
+    The standard DjangoJSONEncoder truncates timestamps to the nearest
+    millisecond, which it does to adhere to the ECMA-262 standard on
+    dates and times. However, in our case we have no intention of
+    pushing this data over the wire, so it doesn't need to be standard -
+    it needs to be the same on the way out as the way in.
+
+    """
+
+    def default(self, o: object) -> object:
+        # bypass the encoding of datetime timestamps
+        if isinstance(o, datetime):
+            return o.isoformat()
+        return super().default(o)
 
 
 class FrozenObjectDescriptor:
@@ -135,7 +155,7 @@ class FrozenObjectField(models.JSONField):
         self.select_related = select_related or []
         self.select_properties = select_properties or []
         self.converters = converters or {}
-        json_field_kwargs.setdefault("encoder", DjangoJSONEncoder)
+        json_field_kwargs.setdefault("encoder", FrozenJSONEncoder)
         super().__init__(**json_field_kwargs)
 
     @property
