@@ -11,6 +11,7 @@ from uuid import UUID
 import freezegun
 import pytest
 import pytz
+from django.utils.dateparse import parse_datetime
 
 from frozen_field.exceptions import FrozenObjectError
 from frozen_field.serializers import (
@@ -18,6 +19,7 @@ from frozen_field.serializers import (
     gather_fields,
     split_list,
     strip_dict,
+    trim_microseconds,
     unfreeze_object,
 )
 from frozen_field.types import AttributeList, AttributeName, is_dataclass_instance
@@ -53,7 +55,7 @@ TEST_DATA = {
     "field_str": "This is some text",
     "field_bool": True,
     "field_date": "2021-06-04",
-    "field_datetime": "2021-06-04T18:10:30.548876Z",
+    "field_datetime": "2021-06-04T18:10:30.548Z",
     "field_decimal": "3.142",
     "field_float": 1,
     "field_uuid": "6f09460c-c82b-4c8f-9d94-8828402da52e",
@@ -234,7 +236,10 @@ class TestFreezeObject:
         assert frozen_obj is not None
         assert is_dataclass_instance(frozen_obj, "FrozenFlatModel")
         for f in frozen_obj._meta.frozen_attrs:
-            assert getattr(flat, f) == getattr(frozen_obj, f)
+            val = getattr(flat, f)
+            if isinstance(val, datetime):
+                val = trim_microseconds(val)
+            assert val == getattr(frozen_obj, f)
         assert isinstance(flat.today, date)
 
     def test_unfreeze_object(self) -> None:
@@ -248,7 +253,7 @@ class TestFreezeObject:
         assert obj.field_bool is True
         assert obj.field_date == date(2021, 6, 4)
         assert obj.field_datetime == datetime(
-            2021, 6, 4, 18, 10, 30, 548876, tzinfo=pytz.UTC
+            2021, 6, 4, 18, 10, 30, 548000, tzinfo=pytz.UTC
         )
         assert obj.field_decimal == Decimal("3.142")
         assert obj.field_float == float(1)
@@ -326,3 +331,17 @@ def test_pickle_frozen_object(flat: FlatModel) -> None:
     p = pickle.dumps(frozen)
     q = pickle.loads(p)
     assert q == frozen
+
+
+@pytest.mark.parametrize(
+    "t1,t2",
+    [
+        ("2021-09-13T09:13:13.221174+00:00", "2021-09-13T09:13:13.221+00:00"),
+        ("2021-09-13T09:13:13.221876+00:00", "2021-09-13T09:13:13.221+00:00"),
+        ("2021-06-04T18:10:30.548Z", "2021-06-04T18:10:30.548Z"),
+    ],
+)
+def test_trim_microseconds(t1: str, t2: str) -> None:
+    dt1 = parse_datetime(t1)
+    dt2 = parse_datetime(t2)
+    assert trim_microseconds(dt1) == dt2
