@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+from datetime import datetime
 
 from django.db import models
 from django.db.models.fields import Field
@@ -15,6 +16,11 @@ from .types import (
     FrozenModel,
     klass_str,
 )
+
+
+def trim_microseconds(dt: datetime) -> datetime:
+    """Trim microseconds from a datetime as per ECMA-262."""
+    return dt.replace(microsecond=((dt.microsecond // 1000) * 1000))
 
 
 def strip_dict(values: FieldConverterMap, prefix: AttributeName) -> FieldConverterMap:
@@ -128,6 +134,10 @@ def freeze_object(
                     "You cannot control the serialization of already frozen sub-fields."
                 )
             values[f] = val
+        elif isinstance(val, datetime):
+            # trim microseconds from timestamps - so that they match
+            # the JSON encoded form.
+            values[f] = trim_microseconds(val)
         else:
             values[f] = val
 
