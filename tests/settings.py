@@ -67,7 +67,7 @@ LOGGING = {
         }
     },
     "loggers": {
-        "": {"handlers": ["console"], "propagate": True, "level": "DEBUG"},
+        "": {"handlers": ["console"], "propagate": True, "level": "INFO"},
         "frozen": {"handlers": ["console"], "propagate": True, "level": "INFO"},
         # 'django': {
         #     'handlers': ['console'],
