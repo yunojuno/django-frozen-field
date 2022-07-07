@@ -29,6 +29,7 @@ packages = [{ include = "frozen_field" }]
 [tool.poetry.dependencies]
 python = "^3.9"
 django = "^3.2 | ^4.0"
+pytz = "^2022.1"
 
 [tool.poetry.dev-dependencies]
 black = {version = "*", allow-prereleases = true}
