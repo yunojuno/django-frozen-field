@@ -2,6 +2,10 @@
 
 Django model custom field for storing a frozen snapshot of an object.
 
+### Version support
+
+The current version of the this app support **Python 3.8+** and **Django 3.2+**
+
 ## Principles
 
 * Behaves like a `ForeignKey` but the data is detached from the related object
